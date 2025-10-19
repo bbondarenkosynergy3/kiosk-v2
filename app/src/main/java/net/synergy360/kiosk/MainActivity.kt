@@ -77,7 +77,7 @@ class MainActivity : Activity() {
             }
             override fun onPageFinished(view: WebView?, url: String?) { hideOffline() }
         }
-        webView.loadUrl("https://app.360synergy.net")
+        webView.loadUrl("https://360synergy.net/kiosk/")
         root.addView(webView, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
