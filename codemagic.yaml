@@ -1,0 +1,14 @@
+workflows:
+  android_debug_apk:
+    name: Build Android Debug APK
+    max_build_duration: 60
+    environment:
+      vars:
+        GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx2048m'"
+    scripts:
+      - name: Build with system Gradle
+        script: |
+          gradle --version
+          gradle clean assembleDebug --warning-mode all
+    artifacts:
+      - app/build/outputs/**/*.apk

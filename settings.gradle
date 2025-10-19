@@ -1,0 +1,2 @@
+rootProject.name = "SynergyKiosk_Pro_v2"
+include ':app'
