@@ -22,8 +22,8 @@ class MainActivity : Activity() {
     private var offlineBanner: TextView? = null
 
     // Night sleep window: 21:00 - 09:00 (device local time)
-    private val sleepStartHour = 21
-    private val sleepEndHour = 9
+    private val sleepStartHour = 02
+    private val sleepEndHour = 7
 
     // Manual wake duration after tap during sleep (ms)
     private val manualWakeMs = 60_000L
