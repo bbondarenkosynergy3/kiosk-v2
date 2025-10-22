@@ -22,8 +22,8 @@ class MainActivity : Activity() {
     private var offlineBanner: TextView? = null
 
     // Night sleep window: 21:00 - 09:00 (device local time)
-    private val sleepStartHour = 21
-    private val sleepEndHour = 9
+    private val sleepStartHour = 2
+    private val sleepEndHour = 7
 
     // Manual wake duration after tap during sleep (ms)
     private val manualWakeMs = 60_000L
@@ -77,7 +77,7 @@ class MainActivity : Activity() {
             }
             override fun onPageFinished(view: WebView?, url: String?) { hideOffline() }
         }
-        webView.loadUrl("https://app.360synergy.net")
+        webView.loadUrl("https://360synergy.net/kiosk/")
         root.addView(webView, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
