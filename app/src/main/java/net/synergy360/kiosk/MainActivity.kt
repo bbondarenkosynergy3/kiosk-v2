@@ -1,6 +1,7 @@
 package net.synergy360.kiosk
 
 import android.app.Activity
+import android.util.Log
 import android.app.AlertDialog
 import android.graphics.Color
 import android.os.*
