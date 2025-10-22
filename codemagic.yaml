@@ -10,5 +10,8 @@ workflows:
         script: |
           gradle --version
           gradle clean assembleDebug --warning-mode all
+      - name: Show Gradle signing info
+        script: |
+          ./gradlew signingReport
     artifacts:
       - app/build/outputs/**/*.apk
