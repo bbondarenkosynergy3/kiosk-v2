@@ -6,9 +6,6 @@ workflows:
       vars:
         GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx2048m'"
     scripts:
-      - name: Clean project
-        script: |
-          ./gradlew clean
       - name: Build with system Gradle
         script: |
           gradle --version
