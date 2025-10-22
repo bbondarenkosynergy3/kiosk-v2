@@ -49,3 +49,5 @@ configurations.all {
         force 'androidx.lifecycle:lifecycle-runtime:2.6.1'
     }
 }
+
+apply plugin: 'com.google.gms.google-services'
