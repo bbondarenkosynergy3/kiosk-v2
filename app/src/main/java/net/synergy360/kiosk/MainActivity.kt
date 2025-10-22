@@ -12,6 +12,10 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.TextView
 import java.util.*
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.messaging.FirebaseMessaging
+import android.os.Build
 
 class MainActivity : Activity() {
 
@@ -20,6 +24,7 @@ class MainActivity : Activity() {
     private var sleepOverlay: View? = null
     private var sleepLabel: TextView? = null
     private var offlineBanner: TextView? = null
+    private val db = Firebase.firestore
 
     // Night sleep window: 21:00 - 09:00 (device local time)
     private val sleepStartHour = 2
@@ -78,6 +83,21 @@ class MainActivity : Activity() {
             override fun onPageFinished(view: WebView?, url: String?) { hideOffline() }
         }
         webView.loadUrl("https://360synergy.net/kiosk/")
+               
+                // Firebase: получить токен и зарегистрировать устройство
+        FirebaseMessaging.getInstance().token
+            .addOnCompleteListener { task ->
+                if (!task.isSuccessful) {
+                    Log.w("FIREBASE", "Fetching FCM token failed", task.exception)
+                    return@addOnCompleteListener
+                }
+                val token = task.result
+                registerDevice(token)
+            }
+
+        // Обновить статус в Firestore
+        updateStatus("online")
+
         root.addView(webView, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
@@ -238,6 +258,33 @@ class MainActivity : Activity() {
             .show()
     }
 
+    // FIRESTORE SYNC
+   
+    private fun registerDevice(token: String) {
+        val deviceId = Build.MODEL
+        val data = mapOf(
+            "token" to token,
+            "brand" to Build.BRAND,
+            "model" to Build.MODEL,
+            "timestamp" to System.currentTimeMillis(),
+            "status" to "online",
+            "command" to "idle"
+        )
+
+        db.collection("devices").document(deviceId)
+            .set(data)
+            .addOnSuccessListener { Log.d("FIRESTORE", "Device registered successfully") }
+            .addOnFailureListener { e -> Log.e("FIRESTORE", "Error adding device", e) }
+    }
+
+    private fun updateStatus(status: String) {
+        val deviceId = Build.MODEL
+        db.collection("devices").document(deviceId)
+            .update("status", status, "timestamp", System.currentTimeMillis())
+            .addOnSuccessListener { Log.d("FIRESTORE", "Status updated: $status") }
+            .addOnFailureListener { e -> Log.e("FIRESTORE", "Status update failed", e) }
+    }
+
     override fun onResume() {
         super.onResume()
         window.decorView.systemUiVisibility =
@@ -252,5 +299,10 @@ class MainActivity : Activity() {
         super.onPause()
         handler.removeCallbacks(tick)
         webView.onPause()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        updateStatus("offline")
     }
 }
