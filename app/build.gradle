@@ -5,15 +5,15 @@ plugins {
 }
 
 android {
-    namespace "net.synergy360.kiosk"
-    compileSdk 34
+    namespace = "net.synergy360.kiosk"
+    compileSdk = 34
 
     defaultConfig {
-        applicationId "net.synergy360.kiosk"
-        minSdk 29
-        targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        applicationId = "net.synergy360.kiosk"
+        minSdk = 29
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
     }
 
     buildTypes {
