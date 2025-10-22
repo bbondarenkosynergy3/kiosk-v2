@@ -6,5 +6,13 @@ pluginManagement {
     }
 }
 
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
 rootProject.name = "SynergyKiosk_Pro_v2"
 include ':app'
