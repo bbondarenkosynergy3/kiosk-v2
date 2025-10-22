@@ -45,7 +45,7 @@ class MyFirebaseService : FirebaseMessagingService() {
         )
 
         db.collection("devices")
-            .add(deviceInfo)
+            .set(deviceInfo)
             .addOnSuccessListener { Log.d("Firestore", "Device registered successfully!") }
             .addOnFailureListener { e -> Log.w("Firestore", "Error adding device", e) }
     }

@@ -25,7 +25,7 @@ class MainActivity : Activity() {
     private var sleepOverlay: View? = null
     private var sleepLabel: TextView? = null
     private var offlineBanner: TextView? = null
-    private val db = Firebase.firestore
+    private val db = FirebaseFirestore.getInstance()
 
     // Night sleep window: 21:00 - 09:00 (device local time)
     private val sleepStartHour = 2
@@ -94,10 +94,11 @@ class MainActivity : Activity() {
                 }
                 val token = task.result
                 registerDevice(token)
+                // Обновить статус в Firestore
+                updateStatus("online")
             }
 
-        // Обновить статус в Firestore
-        updateStatus("online")
+      
 
         root.addView(webView, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
