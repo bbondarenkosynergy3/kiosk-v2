@@ -2,10 +2,11 @@ package net.synergy360.kiosk
 
 import android.os.Build
 import android.util.Log
-import com.google.firebase.firestore
-import com.google.firebase.Firebase
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.google.android.gms.tasks.OnSuccessListener
+import com.google.android.gms.tasks.OnFailureListener
 
 class MyFirebaseService : FirebaseMessagingService() {
 
@@ -25,11 +26,13 @@ class MyFirebaseService : FirebaseMessagingService() {
         )
 
         db.collection("devices")
-            .document(deviceId)
-            .set(data)
-            .addOnSuccessListener { Log.d("FIRESTORE", "Device registered successfully") }
-            .addOnFailureListener { e -> Log.e("FIRESTORE", "Error registering device", e) }
-    }
+            .add(data)
+            .addOnSuccessListener(OnSuccessListener<Void> {
+        Log.d("Firestore", "Token saved")
+              })
+            .addOnFailureListener(OnFailureListener { e ->
+        Log.e("Firestore", "Error saving token", e)
+    })
 
     override fun onMessageReceived(message: RemoteMessage) {
         Log.d("FCM_MESSAGE", "Received message: ${message.data}")
