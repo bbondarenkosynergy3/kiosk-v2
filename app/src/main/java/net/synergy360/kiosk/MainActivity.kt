@@ -85,17 +85,23 @@ class MainActivity : Activity() {
         webView.loadUrl("https://360synergy.net/kiosk/")
                
                 // Firebase: получить токен и зарегистрировать устройство
+        // Firebase: сбросить старый токен и получить новый
+FirebaseMessaging.getInstance().deleteToken()
+    .addOnCompleteListener {
+        Log.d("FIREBASE", "🧹 Old FCM token deleted, requesting new one...")
+
         FirebaseMessaging.getInstance().token
             .addOnCompleteListener { task ->
                 if (!task.isSuccessful) {
-                    Log.w("FIREBASE", "Fetching FCM token failed", task.exception)
+                    Log.w("FIREBASE", "Fetching new FCM token failed", task.exception)
                     return@addOnCompleteListener
                 }
+
                 val token = task.result
+                Log.d("FIREBASE", "✅ New FCM token: $token")
                 registerDevice(token)
-                // Обновить статус в Firestore
-                updateStatus("online")
             }
+    }
 
       
 
