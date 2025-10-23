@@ -8,28 +8,38 @@ import com.google.firebase.messaging.RemoteMessage
 
 class MyFirebaseService : FirebaseMessagingService() {
 
-    override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        Log.d("FCM", "Message received: ${remoteMessage.data}")
+    // === ACTIVITY LIFECYCLE MONITORING ===
+override fun onResume() {
+    super.onResume()
 
-        val action = remoteMessage.data["action"]
-        when (action) {
-            "reload" -> {
-                Log.d("FCM", "Reload command received")
-                // TODO: реализовать reload страницы через BroadcastReceiver
-            }
-            "lock" -> {
-                Log.d("FCM", "Lock command received")
-            }
-            "wake" -> {
-                Log.d("FCM", "Wake command received")
-            }
-            "reboot" -> {
-                Log.d("FCM", "Reboot command received")
-            }
-            else -> {
-                Log.d("FCM", "Unknown action: $action")
-            }
-        }
-    }
+    // Восстановить фуллскрин и возобновить таймер
+    window.decorView.systemUiVisibility =
+        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+        View.SYSTEM_UI_FLAG_FULLSCREEN or
+        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+
+    handler.post(tick)
+    webView.onResume()
+
+    // 🔹 При активации экрана — статус ONLINE
+    updateStatus("online")
+}
+
+override fun onPause() {
+    super.onPause()
+
+    // 🔹 Когда приложение уходит в фон — INACTIVE
+    updateStatus("inactive")
+
+    handler.removeCallbacks(tick)
+    webView.onPause()
+}
+
+override fun onDestroy() {
+    super.onDestroy()
+
+    // 🔹 Когда Activity уничтожается — OFFLINE
+    updateStatus("offline")
+}
 
 }
