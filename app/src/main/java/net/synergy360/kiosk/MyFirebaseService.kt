@@ -8,38 +8,33 @@ import com.google.firebase.messaging.RemoteMessage
 
 class MyFirebaseService : FirebaseMessagingService() {
 
-    // === ACTIVITY LIFECYCLE MONITORING ===
-override fun onResume() {
-    super.onResume()
+    override fun onMessageReceived(remoteMessage: RemoteMessage) {
+        Log.d("FCM", "📩 Message received: ${remoteMessage.data}")
+    }
 
-    // Восстановить фуллскрин и возобновить таймер
-    window.decorView.systemUiVisibility =
-        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-        View.SYSTEM_UI_FLAG_FULLSCREEN or
-        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+    override fun onNewToken(token: String) {
+        Log.d("FCM", "🔄 New token: $token")
 
-    handler.post(tick)
-    webView.onResume()
+        val db = FirebaseFirestore.getInstance()
+        val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
+        val deviceId = prefs.getString("device_id", null)
 
-    // 🔹 При активации экрана — статус ONLINE
-    updateStatus("online")
-}
+        if (deviceId != null) {
+            val data = mapOf(
+                "token" to token,
+                "timestamp" to System.currentTimeMillis()
+            )
 
-override fun onPause() {
-    super.onPause()
-
-    // 🔹 Когда приложение уходит в фон — INACTIVE
-    updateStatus("inactive")
-
-    handler.removeCallbacks(tick)
-    webView.onPause()
-}
-
-override fun onDestroy() {
-    super.onDestroy()
-
-    // 🔹 Когда Activity уничтожается — OFFLINE 
-    updateStatus("offline")
-}
-
+            db.collection("devices").document(deviceId)
+                .set(data, com.google.firebase.firestore.SetOptions.merge())
+                .addOnSuccessListener {
+                    Log.d("FIRESTORE", "✅ Token updated for existing device: $deviceId")
+                }
+                .addOnFailureListener { e ->
+                    Log.e("FIRESTORE", "❌ Failed to update token", e)
+                }
+        } else {
+            Log.w("FIRESTORE", "⚠️ No saved deviceId — skipping token update")
+        }
+    }
 }
