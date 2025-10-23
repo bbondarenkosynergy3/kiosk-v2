@@ -37,19 +37,24 @@ android {
 }
 
 dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.24"
-    implementation platform('com.google.firebase:firebase-bom:34.4.0')
-    implementation 'com.google.firebase:firebase-messaging'
+    // ⚙️ Совместимый Kotlin SDK
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:2.0.21"
+
+    // ⚙️ Firebase BOM гарантирует совместимость всех SDK
+    implementation platform('com.google.firebase:firebase-bom:33.4.0')
     implementation 'com.google.firebase:firebase-analytics'
+    implementation 'com.google.firebase:firebase-messaging'
     implementation 'com.google.firebase:firebase-firestore'
+
+    // 🔧 AndroidX (чтобы избежать ошибок с core.ktx)
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.activity:activity-ktx:1.9.3'
 }
 
 configurations.all {
     resolutionStrategy {
-        force 'androidx.core:core:1.12.0'
-        force 'androidx.annotation:annotation:1.7.0'
-        force 'androidx.lifecycle:lifecycle-runtime:2.6.1'
+        force 'androidx.core:core:1.13.1'
+        force 'androidx.annotation:annotation:1.7.1'
+        force 'androidx.lifecycle:lifecycle-runtime:2.7.0'
     }
 }
-
-apply plugin: 'com.google.gms.google-services'
