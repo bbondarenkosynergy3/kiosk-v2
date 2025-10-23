@@ -28,13 +28,7 @@ class MainActivity : Activity() {
     private val db = FirebaseFirestore.getInstance()
 
     private val prefs by lazy { getSharedPreferences("kiosk_prefs", MODE_PRIVATE) }
-    private val deviceId: String by lazy {
-    prefs.getString("device_id", null) ?: run {
-        val newId = "${Build.MODEL}_${UUID.randomUUID().toString().take(8)}"
-        prefs.edit().putString("device_id", newId).apply()
-        newId
-    }
-}
+    private var deviceId: String = ""
 
     // Night sleep window: 21:00 - 09:00 (device local time)
     private val sleepStartHour = 2
