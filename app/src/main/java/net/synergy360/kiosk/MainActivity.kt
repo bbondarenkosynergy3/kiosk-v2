@@ -275,6 +275,7 @@ class MainActivity : Activity() {
 
     // FIRESTORE SYNC
     private fun registerDevice(token: String) {
+        val now = System.currentTimeMillis()
         val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
 
         // Сохраняем уникальный ID между сессиями
