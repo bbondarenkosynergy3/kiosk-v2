@@ -272,7 +272,7 @@ FirebaseMessaging.getInstance().deleteToken()
     // FIRESTORE SYNC
    
     private fun registerDevice(token: String) {
-    val deviceId = "${Build.MODEL}_${token.take(12)}" // уникальный ID
+    val deviceId = "${Build.MODEL}_${token.take(12)}" // уникальный ID устройства
     val data = mapOf(
         "token" to token,
         "brand" to Build.BRAND,
@@ -283,34 +283,18 @@ FirebaseMessaging.getInstance().deleteToken()
         "command" to "idle"
     )
 
+    // ✅ Однократная регистрация или обновление устройства
     db.collection("devices").document(deviceId)
-        .set(data, com.google.firebase.firestore.SetOptions.merge()) // 🔹 обновит, не создаст дубль
+        .set(data, com.google.firebase.firestore.SetOptions.merge())
         .addOnSuccessListener {
-            Log.d("FIRESTORE", "✅ Device registered successfully (ID: $deviceId)")
+            Log.d("FIRESTORE", "✅ Device registered/updated successfully (ID: $deviceId)")
         }
         .addOnFailureListener { e ->
-            Log.e("FIRESTORE", "❌ Error adding device", e)
+            Log.e("FIRESTORE", "❌ Error adding/updating device", e)
         }
 }
 
-    val deviceRef = db.collection("devices").document(deviceId)
-
-    deviceRef.get().addOnSuccessListener { doc ->
-        if (doc.exists()) {
-            // 🔁 обновляем только изменённые данные
-            deviceRef.set(data, com.google.firebase.firestore.SetOptions.merge())
-            Log.d("FIRESTORE", "Device updated (ID: $deviceId)")
-        } else {
-            // 🆕 создаём новое устройство
-            deviceRef.set(data)
-            Log.d("FIRESTORE", "New device registered (ID: $deviceId)")
-        }
-    }.addOnFailureListener { e ->
-        Log.e("FIRESTORE", "Failed to check device existence", e)
-    }
-}
-
-    private fun updateStatus(status: String) {
+private fun updateStatus(status: String) {
     val now = System.currentTimeMillis()
     val updateData = mapOf(
         "status" to status,
@@ -318,13 +302,14 @@ FirebaseMessaging.getInstance().deleteToken()
         "timestamp" to now
     )
 
+    // ✅ Обновляем только существующее устройство (без дубликатов)
     db.collection("devices").document(deviceId)
         .set(updateData, com.google.firebase.firestore.SetOptions.merge())
         .addOnSuccessListener {
-            Log.d("FIRESTORE", "Status updated: $status (ID: $deviceId)")
+            Log.d("FIRESTORE", "✅ Status updated: $status (ID: $deviceId)")
         }
         .addOnFailureListener { e ->
-            Log.e("FIRESTORE", "Status update failed", e)
+            Log.e("FIRESTORE", "❌ Status update failed", e)
         }
 }
 
