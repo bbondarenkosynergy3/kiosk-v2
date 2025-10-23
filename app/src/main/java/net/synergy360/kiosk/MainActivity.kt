@@ -270,8 +270,6 @@ FirebaseMessaging.getInstance().deleteToken()
     }
 
     // FIRESTORE SYNC
-    private lateinit var deviceId: String
-
     private fun registerDevice(token: String) {
         val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
 
