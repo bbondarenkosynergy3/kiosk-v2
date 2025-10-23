@@ -26,6 +26,15 @@ class MainActivity : Activity() {
     private var offlineBanner: TextView? = null
     private val db = FirebaseFirestore.getInstance()
 
+    private val prefs by lazy { getSharedPreferences("kiosk_prefs", MODE_PRIVATE) }
+    private val deviceId: String by lazy {
+    prefs.getString("device_id", null) ?: run {
+        val newId = "${Build.MODEL}_${UUID.randomUUID().toString().take(8)}"
+        prefs.edit().putString("device_id", newId).apply()
+        newId
+    }
+}
+
     // Night sleep window: 21:00 - 09:00 (device local time)
     private val sleepStartHour = 2
     private val sleepEndHour = 7
@@ -268,29 +277,51 @@ FirebaseMessaging.getInstance().deleteToken()
     // FIRESTORE SYNC
    
     private fun registerDevice(token: String) {
-        val deviceId = Build.MODEL
-        val data = mapOf(
-            "token" to token,
-            "brand" to Build.BRAND,
-            "model" to Build.MODEL,
-            "timestamp" to System.currentTimeMillis(),
-            "status" to "online",
-            "command" to "idle"
-        )
+    val data = hashMapOf(
+        "token" to token,
+        "brand" to Build.BRAND,
+        "model" to Build.MODEL,
+        "sdk" to Build.VERSION.SDK_INT,
+        "appVersion" to BuildConfig.VERSION_NAME,
+        "timestamp" to System.currentTimeMillis(),
+        "status" to "online",
+        "command" to "idle"
+    )
 
-        db.collection("devices").document(deviceId)
-            .set(data)
-            .addOnSuccessListener { Log.d("FIRESTORE", "Device registered successfully") }
-            .addOnFailureListener { e -> Log.e("FIRESTORE", "Error adding device", e) }
+    val deviceRef = db.collection("devices").document(deviceId)
+
+    deviceRef.get().addOnSuccessListener { doc ->
+        if (doc.exists()) {
+            // 🔁 обновляем только изменённые данные
+            deviceRef.set(data, com.google.firebase.firestore.SetOptions.merge())
+            Log.d("FIRESTORE", "Device updated (ID: $deviceId)")
+        } else {
+            // 🆕 создаём новое устройство
+            deviceRef.set(data)
+            Log.d("FIRESTORE", "New device registered (ID: $deviceId)")
+        }
+    }.addOnFailureListener { e ->
+        Log.e("FIRESTORE", "Failed to check device existence", e)
     }
+}
 
     private fun updateStatus(status: String) {
-        val deviceId = Build.MODEL
-        db.collection("devices").document(deviceId)
-            .update("status", status, "timestamp", System.currentTimeMillis())
-            .addOnSuccessListener { Log.d("FIRESTORE", "Status updated: $status") }
-            .addOnFailureListener { e -> Log.e("FIRESTORE", "Status update failed", e) }
-    }
+    val now = System.currentTimeMillis()
+    val updateData = mapOf(
+        "status" to status,
+        "lastSeen" to now,
+        "timestamp" to now
+    )
+
+    db.collection("devices").document(deviceId)
+        .set(updateData, com.google.firebase.firestore.SetOptions.merge())
+        .addOnSuccessListener {
+            Log.d("FIRESTORE", "Status updated: $status (ID: $deviceId)")
+        }
+        .addOnFailureListener { e ->
+            Log.e("FIRESTORE", "Status update failed", e)
+        }
+}
 
     override fun onResume() {
         super.onResume()
