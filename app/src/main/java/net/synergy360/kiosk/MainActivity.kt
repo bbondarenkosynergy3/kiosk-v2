@@ -380,14 +380,6 @@ class MainActivity : Activity() {
         updateStatus("offline")
     }
 
-    private fun sendHeartbeat() {
-    val now = System.currentTimeMillis()
-    val updateData = mapOf(
-        "status" to "online",
-        "lastSeen" to now,
-        "heartbeat" to true,
-        "timestamp" to now
-    )
 
     db.collection("devices").document(deviceId)
         .set(updateData, com.google.firebase.firestore.SetOptions.merge())
