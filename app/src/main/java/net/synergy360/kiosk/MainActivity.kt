@@ -16,6 +16,7 @@ import java.util.*
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import android.os.Build
+import net.synergy360.kiosk.BuildConfig
 
 class MainActivity : Activity() {
 
