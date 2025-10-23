@@ -341,6 +341,7 @@ class MainActivity : Activity() {
                 Log.e("COMMANDS", "Listener error", e)
                 return@addSnapshotListener
             }
+            Log.d("COMMAND", "👂 Listening for command changes on $deviceId")
             if (snap == null || !snap.exists()) {
                 // ещё не создали документ — ничего страшного
                 return@addSnapshotListener
