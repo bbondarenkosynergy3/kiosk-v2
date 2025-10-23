@@ -390,4 +390,3 @@ class MainActivity : Activity() {
             Log.e("HEARTBEAT", "💔 Failed to send heartbeat", e)
         }
 }
-}
