@@ -270,48 +270,60 @@ FirebaseMessaging.getInstance().deleteToken()
     }
 
     // FIRESTORE SYNC
-   
+    private lateinit var deviceId: String
+
     private fun registerDevice(token: String) {
-    val deviceId = "${Build.MODEL}_${token.take(12)}" // уникальный ID устройства
-    val data = mapOf(
-        "token" to token,
-        "brand" to Build.BRAND,
-        "model" to Build.MODEL,
-        "sdk" to Build.VERSION.SDK_INT,
-        "timestamp" to System.currentTimeMillis(),
-        "status" to "online",
-        "command" to "idle"
-    )
+        val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
 
-    // ✅ Однократная регистрация или обновление устройства
-    db.collection("devices").document(deviceId)
-        .set(data, com.google.firebase.firestore.SetOptions.merge())
-        .addOnSuccessListener {
-            Log.d("FIRESTORE", "✅ Device registered/updated successfully (ID: $deviceId)")
+        // Сохраняем уникальный ID между сессиями
+        val savedId = prefs.getString("device_id", null)
+        val id = if (savedId != null) {
+            savedId
+        } else {
+            val newId = "${Build.MODEL}_${UUID.randomUUID().toString().take(8)}"
+            prefs.edit().putString("device_id", newId).apply()
+            newId
         }
-        .addOnFailureListener { e ->
-            Log.e("FIRESTORE", "❌ Error adding/updating device", e)
-        }
-}
+        deviceId = id  // сохраняем в поле класса
 
-private fun updateStatus(status: String) {
-    val now = System.currentTimeMillis()
-    val updateData = mapOf(
-        "status" to status,
-        "lastSeen" to now,
-        "timestamp" to now
-    )
+        val data = mapOf(
+            "token" to token,
+            "brand" to Build.BRAND,
+            "model" to Build.MODEL,
+            "sdk" to Build.VERSION.SDK_INT,
+            "timestamp" to System.currentTimeMillis(),
+            "status" to "online",
+            "command" to "idle"
+        )
 
-    // ✅ Обновляем только существующее устройство (без дубликатов)
-    db.collection("devices").document(deviceId)
-        .set(updateData, com.google.firebase.firestore.SetOptions.merge())
-        .addOnSuccessListener {
-            Log.d("FIRESTORE", "✅ Status updated: $status (ID: $deviceId)")
-        }
-        .addOnFailureListener { e ->
-            Log.e("FIRESTORE", "❌ Status update failed", e)
-        }
-}
+        // ✅ Обновление или создание одной записи
+        db.collection("devices").document(deviceId)
+            .set(data, com.google.firebase.firestore.SetOptions.merge())
+            .addOnSuccessListener {
+                Log.d("FIRESTORE", "✅ Device registered/updated successfully (ID: $deviceId)")
+            }
+            .addOnFailureListener { e ->
+                Log.e("FIRESTORE", "❌ Error adding/updating device", e)
+            }
+    }
+
+    private fun updateStatus(status: String) {
+        val now = System.currentTimeMillis()
+        val updateData = mapOf(
+            "status" to status,
+            "lastSeen" to now,
+            "timestamp" to now
+        )
+
+        db.collection("devices").document(deviceId)
+            .set(updateData, com.google.firebase.firestore.SetOptions.merge())
+            .addOnSuccessListener {
+                Log.d("FIRESTORE", "✅ Status updated: $status (ID: $deviceId)")
+            }
+            .addOnFailureListener { e ->
+                Log.e("FIRESTORE", "❌ Status update failed", e)
+            }
+    }
 
     override fun onResume() {
         super.onResume()
