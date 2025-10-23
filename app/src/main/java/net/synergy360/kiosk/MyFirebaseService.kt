@@ -32,22 +32,7 @@ class MyFirebaseService : FirebaseMessagingService() {
         }
     }
 
-    override fun onNewToken(token: String) {
-    Log.d("FCM", "New token: $token")
-
-    val db = FirebaseFirestore.getInstance()
-    val deviceInfo = hashMapOf(
-        "token" to token,
-        "model" to Build.MODEL,
-        "brand" to Build.BRAND,
-        "sdk" to Build.VERSION.SDK_INT,
-        "timestamp" to System.currentTimeMillis()
-    )
-
-    db.collection("devices")
-        .document(Build.MODEL) // 👈 фиксированный ID устройства
-        .set(deviceInfo)
-        .addOnSuccessListener { Log.d("Firestore", "✅ Device registered successfully!") }
-        .addOnFailureListener { e -> Log.w("Firestore", "❌ Error adding device", e) }
+    override fun onMessageReceived(remoteMessage: RemoteMessage) {
+    Log.d("FCM", "Message received: ${remoteMessage.data}")
 }
 }
