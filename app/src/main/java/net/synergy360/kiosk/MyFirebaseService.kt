@@ -32,7 +32,4 @@ class MyFirebaseService : FirebaseMessagingService() {
         }
     }
 
-    override fun onMessageReceived(remoteMessage: RemoteMessage) {
-    Log.d("FCM", "Message received: ${remoteMessage.data}")
-}
 }
