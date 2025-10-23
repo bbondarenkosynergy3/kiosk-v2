@@ -379,14 +379,4 @@ class MainActivity : Activity() {
         heartbeatHandler.removeCallbacks(heartbeatRunnable)
         updateStatus("offline")
     }
-
-
-    db.collection("devices").document(deviceId)
-        .set(updateData, com.google.firebase.firestore.SetOptions.merge())
-        .addOnSuccessListener {
-            Log.d("HEARTBEAT", "❤️ Heartbeat sent (ID: $deviceId)")
-        }
-        .addOnFailureListener { e ->
-            Log.e("HEARTBEAT", "💔 Failed to send heartbeat", e)
-        }
 }
