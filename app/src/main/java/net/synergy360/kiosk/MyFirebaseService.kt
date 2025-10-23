@@ -38,7 +38,7 @@ override fun onPause() {
 override fun onDestroy() {
     super.onDestroy()
 
-    // 🔹 Когда Activity уничтожается — OFFLINE
+    // 🔹 Когда Activity уничтожается — OFFLINE 
     updateStatus("offline")
 }
 
