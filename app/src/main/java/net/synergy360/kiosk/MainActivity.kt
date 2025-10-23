@@ -142,7 +142,25 @@ class MainActivity : Activity() {
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
                 Log.d("FCM", "✅ Token fetched: $token")
-                registerDevice(token)  // создаёт или обновляет устройство в Firestore
+                val data = mapOf(
+                    "token" to token,
+                    "brand" to Build.BRAND,
+                    "model" to Build.MODEL,
+                    "sdk" to Build.VERSION.SDK_INT,
+                    "timestamp" to System.currentTimeMillis(),
+                    "status" to "online",
+                    "command" to "idle"
+                )
+
+                db.collection("devices").document(deviceId)
+                    .set(data, SetOptions.merge())
+                    .addOnSuccessListener {
+                        Log.d("FIRESTORE", "✅ Device registered (id=$deviceId)")
+                        startCommandListener()
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e("FIRESTORE", "❌ upsert fail", e)
+                    }
             }
             .addOnFailureListener { e ->
                 Log.e("FCM", "❌ Failed to fetch FCM token", e)
@@ -163,7 +181,7 @@ class MainActivity : Activity() {
                         Log.d("FIRESTORE", "✅ Device registered without token (ID: $localId)")
                     }
             }
-    startCommandListener()
+    
     
     }
 
@@ -297,24 +315,7 @@ class MainActivity : Activity() {
     }
 
 
-    // FIRESTORE SYNC
-        private fun registerDevice(token: String) {
-        val data = mapOf(
-            "token" to token,
-            "brand" to Build.BRAND,
-            "model" to Build.MODEL,
-            "sdk" to Build.VERSION.SDK_INT,
-            "timestamp" to System.currentTimeMillis(),
-            "status" to "online",
-            "command" to "idle"
-        )
 
-        // Один документ на устройство. merge() — обновит поля, дубликат не создаст.
-        db.collection("devices").document(deviceId)
-            .set(data, com.google.firebase.firestore.SetOptions.merge())
-            .addOnSuccessListener { Log.d("FIRESTORE", "✅ upsert ok (id=$deviceId)") }
-            .addOnFailureListener { e -> Log.e("FIRESTORE", "❌ upsert fail", e) }
-    }
 
     private fun updateStatus(status: String) {
         val now = System.currentTimeMillis()
