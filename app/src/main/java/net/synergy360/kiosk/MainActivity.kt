@@ -94,22 +94,16 @@ class MainActivity : Activity() {
         }
         webView.loadUrl("https://360synergy.net/kiosk/")
                
-                // Firebase: получить токен и зарегистрировать устройство
-        // Firebase: сбросить старый токен и получить новый
+// Firebase: получить токен (всегда заново) и зарегистрировать устройство
 FirebaseMessaging.getInstance().deleteToken()
     .addOnCompleteListener {
-        Log.d("FIREBASE", "🧹 Old FCM token deleted, requesting new one...")
-
         FirebaseMessaging.getInstance().token
-            .addOnCompleteListener { task ->
-                if (!task.isSuccessful) {
-                    Log.w("FIREBASE", "Fetching new FCM token failed", task.exception)
-                    return@addOnCompleteListener
-                }
-
-                val token = task.result
-                Log.d("FIREBASE", "✅ New FCM token: $token")
+            .addOnSuccessListener { token ->
+                Log.d("FIREBASE", "✅ Fresh FCM token: $token")
                 registerDevice(token)
+            }
+            .addOnFailureListener { e ->
+                Log.e("FIREBASE", "❌ Failed to fetch FCM token", e)
             }
     }
 
@@ -278,16 +272,26 @@ FirebaseMessaging.getInstance().deleteToken()
     // FIRESTORE SYNC
    
     private fun registerDevice(token: String) {
-    val data = hashMapOf(
+    val deviceId = "${Build.MODEL}_${token.take(12)}" // уникальный ID
+    val data = mapOf(
         "token" to token,
         "brand" to Build.BRAND,
         "model" to Build.MODEL,
         "sdk" to Build.VERSION.SDK_INT,
-        "appVersion" to BuildConfig.VERSION_NAME,
         "timestamp" to System.currentTimeMillis(),
         "status" to "online",
         "command" to "idle"
     )
+
+    db.collection("devices").document(deviceId)
+        .set(data, com.google.firebase.firestore.SetOptions.merge()) // 🔹 обновит, не создаст дубль
+        .addOnSuccessListener {
+            Log.d("FIRESTORE", "✅ Device registered successfully (ID: $deviceId)")
+        }
+        .addOnFailureListener { e ->
+            Log.e("FIRESTORE", "❌ Error adding device", e)
+        }
+}
 
     val deviceRef = db.collection("devices").document(deviceId)
 
