@@ -17,6 +17,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import android.os.Build
 import net.synergy360.kiosk.BuildConfig
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.SetOptions
 
 class MainActivity : Activity() {
 
@@ -161,6 +163,8 @@ class MainActivity : Activity() {
                         Log.d("FIRESTORE", "✅ Device registered without token (ID: $localId)")
                     }
             }
+    startCommandListener()
+    
     }
 
     // Sleep logic
@@ -326,7 +330,91 @@ class MainActivity : Activity() {
             .addOnSuccessListener { Log.d("FIRESTORE", "status=$status (id=$deviceId)") }
             .addOnFailureListener { e -> Log.e("FIRESTORE", "status update fail", e) }
     }
+    
+    // CommandListener
+    private var commandReg: ListenerRegistration? = null
+    private fun deviceRef() = db.collection("devices").document(deviceId)
+    private fun startCommandListener() {
+        // слушаем изменения в документе устройства
+        commandReg = deviceRef().addSnapshotListener { snap, e ->
+            if (e != null) {
+                Log.e("COMMANDS", "Listener error", e)
+                return@addSnapshotListener
+            }
+            if (snap == null || !snap.exists()) {
+                // ещё не создали документ — ничего страшного
+                return@addSnapshotListener
+            }
 
+            val cmd = snap.getString("command") ?: "idle"
+            val cmdId = snap.getString("commandId") // для идемпотентности
+            val payload = (snap.get("payload") as? Map<*, *>)?.filterKeys { it is String } as? Map<String, Any> ?: emptyMap()
+
+            // уже обработанная команда? (идемпотентность)
+            val lastHandled = prefs.getString("last_cmd_id", null)
+            if (cmd == "idle" || cmdId == null || cmdId == lastHandled) {
+                return@addSnapshotListener
+            }
+
+            Log.d("COMMANDS", "New command: $cmd id=$cmdId payload=$payload")
+
+            // Выполняем
+            when (cmd) {
+                "reload" -> {
+                    webView.post { webView.reload() }
+                    ackCommand(cmdId, true, "reloaded")
+                }
+
+                "open_url" -> {
+                    val url = payload["url"] as? String
+                    if (!url.isNullOrBlank()) {
+                        webView.post { webView.loadUrl(url) }
+                        ackCommand(cmdId, true, "opened:$url")
+                    } else {
+                        ackCommand(cmdId, false, "url missing")
+                    }
+                }
+
+                "sleep_now" -> {
+                    runOnUiThread { showSleepOverlay() }
+                    ackCommand(cmdId, true, "sleep overlay shown")
+                }
+
+                "wake" -> {
+                    runOnUiThread { removeSleepOverlay() }
+                    ackCommand(cmdId, true, "woke")
+                }
+
+                "ping" -> {
+                    // просто подтверждаем что живы
+                    ackCommand(cmdId, true, "pong")
+                }
+
+                else -> {
+                    ackCommand(cmdId, false, "unknown command: $cmd")
+                }
+            }
+        }
+    }
+
+    private fun ackCommand(cmdId: String, ok: Boolean, msg: String) {
+        val now = System.currentTimeMillis()
+        val data = mapOf(
+            "command" to "idle",
+            "lastCommandId" to cmdId,
+            "lastCommandStatus" to if (ok) "ok" else "error",
+            "lastCommandMessage" to msg,
+            "lastCommandAt" to now
+        )
+        deviceRef().set(data, SetOptions.merge())
+            .addOnSuccessListener {
+                prefs.edit().putString("last_cmd_id", cmdId).apply()
+                Log.d("COMMANDS", "ACK sent for $cmdId ($msg)")
+            }
+            .addOnFailureListener { e ->
+                Log.e("COMMANDS", "ACK failed", e)
+            }
+    }
 
     private fun sendHeartbeat() {
         val now = System.currentTimeMillis()
@@ -376,7 +464,18 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        
+        // 🧩 Останавливаем heartbeat
         heartbeatHandler.removeCallbacks(heartbeatRunnable)
+
+        // 🧩 Отписываемся от слушателя Firestore-команд (если запущен)
+        commandReg?.remove()
+        commandReg = null
+
+        // 🧩 Обновляем статус устройства
         updateStatus("offline")
     }
+
+
+    
 }
