@@ -40,7 +40,7 @@ class MainActivity : Activity() {
     }
     // === HEARTBEAT (обновление статуса каждые 10 мин) ===
     private val heartbeatHandler = Handler(Looper.getMainLooper())
-    private val heartbeatInterval = 10 * 60 * 1000L // 10 минут
+    private val heartbeatInterval = 1 * 60 * 1000L // 10 минут
     private val heartbeatRunnable = object : Runnable {
         override fun run() {
             sendHeartbeat()                                // отправляем обновление
