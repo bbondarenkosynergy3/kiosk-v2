@@ -88,18 +88,18 @@ class MainActivity : Activity() {
         }
         webView.loadUrl("https://360synergy.net/kiosk/")
                
-// Firebase: получить токен (всегда заново) и зарегистрировать устройство
-FirebaseMessaging.getInstance().deleteToken()
-    .addOnCompleteListener {
-        FirebaseMessaging.getInstance().token
-            .addOnSuccessListener { token ->
-                Log.d("FIREBASE", "✅ Fresh FCM token: $token")
-                registerDevice(token)
+        // Firebase: получить токен (всегда заново) и зарегистрировать устройство
+        FirebaseMessaging.getInstance().deleteToken()
+            .addOnCompleteListener {
+                FirebaseMessaging.getInstance().token
+                    .addOnSuccessListener { token ->
+                        Log.d("FIREBASE", "✅ Fresh FCM token: $token")
+                        registerDevice(token)
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e("FIREBASE", "❌ Failed to fetch FCM token", e)
+                    }
             }
-            .addOnFailureListener { e ->
-                Log.e("FIREBASE", "❌ Failed to fetch FCM token", e)
-            }
-    }
 
       
 
@@ -263,6 +263,16 @@ FirebaseMessaging.getInstance().deleteToken()
             .show()
     }
 
+        // Heartbeat — периодическое обновление статуса устройства
+    private val heartbeatHandler = Handler(Looper.getMainLooper())
+    private val heartbeatInterval = 1 * 60 * 1000L // 1 минут
+    private val heartbeatRunnable = object : Runnable {
+        override fun run() {
+            sendHeartbeat()
+            heartbeatHandler.postDelayed(this, heartbeatInterval)
+        }
+}
+
     // FIRESTORE SYNC
     private fun registerDevice(token: String) {
         val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
@@ -285,6 +295,9 @@ FirebaseMessaging.getInstance().deleteToken()
             "sdk" to Build.VERSION.SDK_INT,
             "timestamp" to System.currentTimeMillis(),
             "status" to "online",
+            "lastSeen" to now,          
+            "firstSeen" to now,         
+            "heartbeat" to true,
             "command" to "idle"
         )
 
@@ -325,16 +338,44 @@ FirebaseMessaging.getInstance().deleteToken()
             View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
         handler.post(tick)
         webView.onResume()
+        // ⚡️ стартуем heartbeat-таймер
+        heartbeatHandler.post(heartbeatRunnable)
+        // и сразу отметим «я онлайн»
+        updateStatus("online")
     }
 
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(tick)
         webView.onPause()
+
+        // 🛑 останавливаем heartbeat-таймер
+        heartbeatHandler.removeCallbacks(heartbeatRunnable)
+        // и пишем, что девайс оффлайн
+        updateStatus("offline")
     }
 
     override fun onDestroy() {
         super.onDestroy()
         updateStatus("offline")
     }
+
+    private fun sendHeartbeat() {
+    val now = System.currentTimeMillis()
+    val updateData = mapOf(
+        "status" to "online",
+        "lastSeen" to now,
+        "heartbeat" to true,
+        "timestamp" to now
+    )
+
+    db.collection("devices").document(deviceId)
+        .set(updateData, com.google.firebase.firestore.SetOptions.merge())
+        .addOnSuccessListener {
+            Log.d("HEARTBEAT", "❤️ Heartbeat sent (ID: $deviceId)")
+        }
+        .addOnFailureListener { e ->
+            Log.e("HEARTBEAT", "💔 Failed to send heartbeat", e)
+        }
+}
 }
