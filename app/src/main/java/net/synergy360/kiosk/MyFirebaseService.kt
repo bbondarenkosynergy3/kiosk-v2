@@ -17,24 +17,22 @@ class MyFirebaseService : FirebaseMessagingService() {
 
         val db = FirebaseFirestore.getInstance()
         val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
-        val deviceId = prefs.getString("device_id", null)
+        val id = prefs.getString("device_id", null)
 
-        if (deviceId != null) {
-            val data = mapOf(
-                "token" to token,
-                "timestamp" to System.currentTimeMillis()
-            )
-
-            db.collection("devices").document(deviceId)
-                .set(data, com.google.firebase.firestore.SetOptions.merge())
-                .addOnSuccessListener {
-                    Log.d("FIRESTORE", "✅ Token updated for existing device: $deviceId")
-                }
-                .addOnFailureListener { e ->
-                    Log.e("FIRESTORE", "❌ Failed to update token", e)
-                }
-        } else {
-            Log.w("FIRESTORE", "⚠️ No saved deviceId — skipping token update")
+        if (id == null) {
+            // Приложение ещё не создало deviceId — просто сохраним токен, MainActivity подхватит
+            prefs.edit().putString("pending_token", token).apply()
+            return
         }
+
+        val update = mapOf(
+            "token" to token,
+            "timestamp" to System.currentTimeMillis()
+        )
+
+        db.collection("devices").document(id)
+            .set(update, com.google.firebase.firestore.SetOptions.merge())
+            .addOnSuccessListener { Log.d("FIRESTORE", "✅ token updated for $id") }
+            .addOnFailureListener { e -> Log.e("FIRESTORE", "❌ token update fail", e) }
     }
 }

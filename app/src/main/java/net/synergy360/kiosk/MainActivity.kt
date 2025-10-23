@@ -27,9 +27,26 @@ class MainActivity : Activity() {
     private var offlineBanner: TextView? = null
     private val db = FirebaseFirestore.getInstance()
 
+    // Shared prefs и стабильный ID устройства (создаётся один раз и хранится в prefs)
     private val prefs by lazy { getSharedPreferences("kiosk_prefs", MODE_PRIVATE) }
-    private var deviceId: String = ""
 
+    private val deviceId: String by lazy {
+        // не завязан на токен/версию apk → не меняется при обновлениях
+        prefs.getString("device_id", null) ?: run {
+            val id = "${Build.MODEL}_${UUID.randomUUID().toString().take(8)}"
+            prefs.edit().putString("device_id", id).apply()
+            id
+        }
+    }
+    // === HEARTBEAT (обновление статуса каждые 10 мин) ===
+    private val heartbeatHandler = Handler(Looper.getMainLooper())
+    private val heartbeatInterval = 10 * 60 * 1000L // 10 минут
+    private val heartbeatRunnable = object : Runnable {
+        override fun run() {
+            sendHeartbeat()                                // отправляем обновление
+            heartbeatHandler.postDelayed(this, heartbeatInterval) // планируем следующее
+        }
+    }
     // Night sleep window: 21:00 - 09:00 (device local time)
     private val sleepStartHour = 2
     private val sleepEndHour = 7
@@ -87,21 +104,7 @@ class MainActivity : Activity() {
             override fun onPageFinished(view: WebView?, url: String?) { hideOffline() }
         }
         webView.loadUrl("https://360synergy.net/kiosk/")
-               
-        // Firebase: получить токен (всегда заново) и зарегистрировать устройство
-        FirebaseMessaging.getInstance().deleteToken()
-            .addOnCompleteListener {
-                FirebaseMessaging.getInstance().token
-                    .addOnSuccessListener { token ->
-                        Log.d("FIREBASE", "✅ Fresh FCM token: $token")
-                        registerDevice(token)
-                    }
-                    .addOnFailureListener { e ->
-                        Log.e("FIREBASE", "❌ Failed to fetch FCM token", e)
-                    }
-            }
 
-      
 
         root.addView(webView, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
@@ -132,6 +135,32 @@ class MainActivity : Activity() {
 
         // Try LockTask (may prompt the first time)
         try { startLockTask() } catch (_: Exception) {}
+
+        // === Получение FCM токена и регистрация устройства ===
+        FirebaseMessaging.getInstance().token
+            .addOnSuccessListener { token ->
+                Log.d("FCM", "✅ Token fetched: $token")
+                registerDevice(token)  // создаёт или обновляет устройство в Firestore
+            }
+            .addOnFailureListener { e ->
+                Log.e("FCM", "❌ Failed to fetch FCM token", e)
+
+                // Даже если токен не получен (нет сети и т.д.), всё равно создадим запись
+                val localId = deviceId
+                val data = mapOf(
+                    "brand" to Build.BRAND,
+                    "model" to Build.MODEL,
+                    "sdk" to Build.VERSION.SDK_INT,
+                    "timestamp" to System.currentTimeMillis(),
+                    "status" to "online",
+                    "token" to "unavailable"
+                )
+                db.collection("devices").document(localId)
+                    .set(data, com.google.firebase.firestore.SetOptions.merge())
+                    .addOnSuccessListener {
+                        Log.d("FIRESTORE", "✅ Device registered without token (ID: $localId)")
+                    }
+            }
     }
 
     // Sleep logic
@@ -263,32 +292,9 @@ class MainActivity : Activity() {
             .show()
     }
 
-        // Heartbeat — периодическое обновление статуса устройства
-    private val heartbeatHandler = Handler(Looper.getMainLooper())
-    private val heartbeatInterval = 1 * 60 * 1000L // 1 минут
-    private val heartbeatRunnable = object : Runnable {
-        override fun run() {
-            sendHeartbeat()
-            heartbeatHandler.postDelayed(this, heartbeatInterval)
-        }
-}
 
     // FIRESTORE SYNC
-    private fun registerDevice(token: String) {
-        val now = System.currentTimeMillis()
-        val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
-
-        // Сохраняем уникальный ID между сессиями
-        val savedId = prefs.getString("device_id", null)
-        val id = if (savedId != null) {
-            savedId
-        } else {
-            val newId = "${Build.MODEL}_${UUID.randomUUID().toString().take(8)}"
-            prefs.edit().putString("device_id", newId).apply()
-            newId
-        }
-        deviceId = id  // сохраняем в поле класса
-
+        private fun registerDevice(token: String) {
         val data = mapOf(
             "token" to token,
             "brand" to Build.BRAND,
@@ -296,38 +302,48 @@ class MainActivity : Activity() {
             "sdk" to Build.VERSION.SDK_INT,
             "timestamp" to System.currentTimeMillis(),
             "status" to "online",
-            "lastSeen" to now,          
-            "firstSeen" to now,         
-            "heartbeat" to true,
             "command" to "idle"
         )
 
-        // ✅ Обновление или создание одной записи
+        // Один документ на устройство. merge() — обновит поля, дубликат не создаст.
         db.collection("devices").document(deviceId)
             .set(data, com.google.firebase.firestore.SetOptions.merge())
-            .addOnSuccessListener {
-                Log.d("FIRESTORE", "✅ Device registered/updated successfully (ID: $deviceId)")
-            }
-            .addOnFailureListener { e ->
-                Log.e("FIRESTORE", "❌ Error adding/updating device", e)
-            }
+            .addOnSuccessListener { Log.d("FIRESTORE", "✅ upsert ok (id=$deviceId)") }
+            .addOnFailureListener { e -> Log.e("FIRESTORE", "❌ upsert fail", e) }
     }
 
     private fun updateStatus(status: String) {
         val now = System.currentTimeMillis()
-        val updateData = mapOf(
+        val update = mapOf(
             "status" to status,
             "lastSeen" to now,
+            "timestamp" to now
+        )
+
+        // Важно: deviceId уже инициализирован лениво выше, он НЕ пустой.
+        db.collection("devices").document(deviceId)
+            .set(update, com.google.firebase.firestore.SetOptions.merge())
+            .addOnSuccessListener { Log.d("FIRESTORE", "status=$status (id=$deviceId)") }
+            .addOnFailureListener { e -> Log.e("FIRESTORE", "status update fail", e) }
+    }
+
+
+    private fun sendHeartbeat() {
+        val now = System.currentTimeMillis()
+        val updateData = mapOf(
+            "status" to "online",
+            "lastSeen" to now,
+            "heartbeat" to true,
             "timestamp" to now
         )
 
         db.collection("devices").document(deviceId)
             .set(updateData, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener {
-                Log.d("FIRESTORE", "✅ Status updated: $status (ID: $deviceId)")
+                Log.d("HEARTBEAT", "❤️ Heartbeat sent (ID: $deviceId)")
             }
             .addOnFailureListener { e ->
-                Log.e("FIRESTORE", "❌ Status update failed", e)
+                Log.e("HEARTBEAT", "💔 Failed to send heartbeat", e)
             }
     }
 
@@ -343,6 +359,7 @@ class MainActivity : Activity() {
         heartbeatHandler.post(heartbeatRunnable)
         // и сразу отметим «я онлайн»
         updateStatus("online")
+        heartbeatHandler.post(heartbeatRunnable)
     }
 
     override fun onPause() {
@@ -354,10 +371,12 @@ class MainActivity : Activity() {
         heartbeatHandler.removeCallbacks(heartbeatRunnable)
         // и пишем, что девайс оффлайн
         updateStatus("offline")
+        heartbeatHandler.removeCallbacks(heartbeatRunnable)
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        heartbeatHandler.removeCallbacks(heartbeatRunnable)
         updateStatus("offline")
     }
 
