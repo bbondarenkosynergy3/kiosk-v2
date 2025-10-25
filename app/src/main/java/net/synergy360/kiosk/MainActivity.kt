@@ -156,7 +156,7 @@ class MainActivity : Activity() {
                     "payload" to emptyMap<String, Any>()  // 🆕 пустой объект payload
                 )
 
-                db.collection("companies").document("pierce").collection("devices").document(deviceId)
+                db.collection("company").document("pierce").collection("devices").document(deviceId)
                     .set(data, SetOptions.merge())
                     .addOnSuccessListener {
                         Log.d("FIRESTORE", "✅ Device registered (id=$deviceId)")
@@ -182,7 +182,7 @@ class MainActivity : Activity() {
                     "commandId" to "init",
                     "payload" to emptyMap<String, Any>()
                 )
-                db.collection("companies").document("pierce").collection("devices").document(localId)
+                db.collection("company").document("pierce").collection("devices").document(localId)
                     .set(fallbackData, SetOptions.merge())
                     .addOnSuccessListener {
                         Log.d("FIRESTORE", "✅ Device registered without token (ID: $localId)")
@@ -334,7 +334,7 @@ class MainActivity : Activity() {
         )
 
         // Важно: deviceId уже инициализирован лениво выше, он НЕ пустой.
-        db.collection("companies").document("pierce").collection("devices").document(deviceId)
+        db.collection("company").document("pierce").collection("devices").document(deviceId)
             .set(update, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener { Log.d("FIRESTORE", "status=$status (id=$deviceId)") }
             .addOnFailureListener { e -> Log.e("FIRESTORE", "status update fail", e) }
@@ -342,7 +342,7 @@ class MainActivity : Activity() {
     
     // CommandListener
     private var commandReg: ListenerRegistration? = null
-    private fun deviceRef() = db.collection("companies").document("pierce").collection("devices").document(deviceId)
+    private fun deviceRef() = db.collection("company").document("pierce").collection("devices").document(deviceId)
     private fun startCommandListener() {
         // слушаем изменения в документе устройства
         commandReg = deviceRef().addSnapshotListener { snap, e ->
@@ -435,7 +435,7 @@ class MainActivity : Activity() {
             "timestamp" to now
         )
 
-        db.collection("companies").document("pierce").collection("devices").document(deviceId)
+        db.collection("company").document("pierce").collection("devices").document(deviceId)
             .set(updateData, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener {
                 Log.d("HEARTBEAT", "❤️ Heartbeat sent (ID: $deviceId)")

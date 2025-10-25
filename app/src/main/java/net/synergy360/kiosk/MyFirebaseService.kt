@@ -30,7 +30,7 @@ class MyFirebaseService : FirebaseMessagingService() {
             "timestamp" to System.currentTimeMillis()
         )
 
-        db.collection("companies").document("pierce").collection("devices").document(id)
+        db.collection("company").document("pierce").collection("devices").document(id)
             .set(update, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener { Log.d("FIRESTORE", "✅ token updated for $id") }
             .addOnFailureListener { e -> Log.e("FIRESTORE", "❌ token update fail", e) }
