@@ -18,6 +18,7 @@ class MyFirebaseService : FirebaseMessagingService() {
         val db = FirebaseFirestore.getInstance()
         val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
         val id = prefs.getString("device_id", null)
+        val company = prefs.getString("company", "pierce") ?: " unknowncompany"
 
         if (id == null) {
             // Приложение ещё не создало deviceId — просто сохраним токен, MainActivity подхватит
@@ -30,9 +31,9 @@ class MyFirebaseService : FirebaseMessagingService() {
             "timestamp" to System.currentTimeMillis()
         )
 
-        db.collection("company").document("pierce").collection("devices").document(id)
+        db.collection("company").document(company).collection("devices").document(id)
             .set(update, com.google.firebase.firestore.SetOptions.merge())
-            .addOnSuccessListener { Log.d("FIRESTORE", "✅ token updated for $id") }
+            .addOnSuccessListener { Log.d("FIRESTORE", "✅ token updated for $id (company=$company)") }
             .addOnFailureListener { e -> Log.e("FIRESTORE", "❌ token update fail", e) }
     }
 }

@@ -82,6 +82,14 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // === Временное сохранение компании в prefs ===
+        if (!prefs.contains("company")) {
+            prefs.edit().putString("company", "pierce").apply()
+            Log.d("SETUP", "✅ Default company saved to prefs: pierce")
+        } else {
+            Log.d("SETUP", "✅ Company already in prefs: ${prefs.getString("company", "unknown")}")
+        }
+
         // Immersive fullscreen
         window.decorView.systemUiVisibility =
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
@@ -105,7 +113,7 @@ class MainActivity : Activity() {
             }
             override fun onPageFinished(view: WebView?, url: String?) { hideOffline() }
         }
-        webView.loadUrl("https://360synergy.net/kiosk/")
+
 
 
         root.addView(webView, FrameLayout.LayoutParams(
@@ -144,7 +152,9 @@ class MainActivity : Activity() {
                 Log.d("FCM", "✅ Token fetched: $token")
 
                 // данные для Firestore при первой регистрации устройства
+                val company = prefs.getString("company", "pierce") ?: " unknowncompany"
                 val data = mapOf(
+                    "company" to company,
                     "token" to token,
                     "brand" to Build.BRAND,
                     "model" to Build.MODEL,
@@ -156,22 +166,27 @@ class MainActivity : Activity() {
                     "payload" to emptyMap<String, Any>()  // 🆕 пустой объект payload
                 )
 
-                db.collection("company").document("pierce").collection("devices").document(deviceId)
+                db.collection("company").document(company).collection("devices").document(deviceId)
                     .set(data, SetOptions.merge())
                     .addOnSuccessListener {
                         Log.d("FIRESTORE", "✅ Device registered (id=$deviceId)")
+
+                        // загружаем веб-страницу после регистрации
+                        val fullUrl = "https://360synergy.net/kiosk/?company=$company&id=$deviceId"
+                        Log.d("WEBVIEW", "🌐 Loading URL: $fullUrl")
+                        webView.loadUrl(fullUrl)
+
                         startCommandListener()
-                    }
-                    .addOnFailureListener { e ->
-                        Log.e("FIRESTORE", "❌ upsert fail", e)
                     }
             }
             .addOnFailureListener { e ->
                 Log.e("FCM", "❌ Failed to fetch FCM token", e)
 
                 // Даже если токен не получен (например, нет сети)
+                val company = prefs.getString("company", "pierce") ?: " unknowncompany"
                 val localId = deviceId
                 val fallbackData = mapOf(
+                    "company" to company,
                     "brand" to Build.BRAND,
                     "model" to Build.MODEL,
                     "sdk" to Build.VERSION.SDK_INT,
@@ -182,7 +197,7 @@ class MainActivity : Activity() {
                     "commandId" to "init",
                     "payload" to emptyMap<String, Any>()
                 )
-                db.collection("company").document("pierce").collection("devices").document(localId)
+                db.collection("company").document(company).collection("devices").document(localId)
                     .set(fallbackData, SetOptions.merge())
                     .addOnSuccessListener {
                         Log.d("FIRESTORE", "✅ Device registered without token (ID: $localId)")
@@ -333,8 +348,9 @@ class MainActivity : Activity() {
             "timestamp" to now
         )
 
+        val company = prefs.getString("company", "pierce") ?: " unknowncompany"
         // Важно: deviceId уже инициализирован лениво выше, он НЕ пустой.
-        db.collection("company").document("pierce").collection("devices").document(deviceId)
+        db.collection("company").document(company).collection("devices").document(deviceId)
             .set(update, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener { Log.d("FIRESTORE", "status=$status (id=$deviceId)") }
             .addOnFailureListener { e -> Log.e("FIRESTORE", "status update fail", e) }
@@ -342,7 +358,10 @@ class MainActivity : Activity() {
     
     // CommandListener
     private var commandReg: ListenerRegistration? = null
-    private fun deviceRef() = db.collection("company").document("pierce").collection("devices").document(deviceId)
+    private fun deviceRef(): com.google.firebase.firestore.DocumentReference {
+        val company = prefs.getString("company", "pierce") ?: " unknowncompany"
+        return db.collection("company").document(company).collection("devices").document(deviceId)
+    }
     private fun startCommandListener() {
         // слушаем изменения в документе устройства
         commandReg = deviceRef().addSnapshotListener { snap, e ->
@@ -435,7 +454,8 @@ class MainActivity : Activity() {
             "timestamp" to now
         )
 
-        db.collection("company").document("pierce").collection("devices").document(deviceId)
+        val company = prefs.getString("company", "pierce") ?: " unknowncompany"
+        db.collection("company").document(company).collection("devices").document(deviceId)
             .set(updateData, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener {
                 Log.d("HEARTBEAT", "❤️ Heartbeat sent (ID: $deviceId)")
