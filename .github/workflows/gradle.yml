@@ -26,8 +26,14 @@ jobs:
     - name: Build debug APK
       run: ./gradlew assembleDebug
 
+    - name: Rename APK with version
+      run: |
+        VERSION_CODE=${GITHUB_RUN_NUMBER}
+        OUTPUT_DIR=app/build/outputs/apk/debug
+        mv "$OUTPUT_DIR/app-debug.apk" "$OUTPUT_DIR/app-debug-v${VERSION_CODE}.apk"
+
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
-        name: synergy360-kiosk-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+        name: synergy360-kiosk-debug-v${{ github.run_number }}
+        path: app/build/outputs/apk/debug/app-debug-v${{ github.run_number }}.apk
