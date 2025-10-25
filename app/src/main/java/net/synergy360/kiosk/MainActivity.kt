@@ -172,7 +172,7 @@ class MainActivity : Activity() {
                         Log.d("FIRESTORE", "✅ Device registered (id=$deviceId)")
 
                         // загружаем веб-страницу после регистрации
-                        val fullUrl = "https://360synergy.net/kiosk/?company=$company&id=$deviceId"
+                        val fullUrl = "https://360synergy.net/kioskv2/public/index.html?company=$company&id=$deviceId"
                         Log.d("WEBVIEW", "🌐 Loading URL: $fullUrl")
                         webView.loadUrl(fullUrl)
 
