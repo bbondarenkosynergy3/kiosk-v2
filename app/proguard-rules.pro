@@ -1,1 +1,1 @@
-# empty
+-keep class net.synergy360.kiosk.MyDeviceAdminReceiver { *; }

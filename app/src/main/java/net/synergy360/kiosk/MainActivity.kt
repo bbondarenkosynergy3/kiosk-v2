@@ -19,6 +19,10 @@ import android.os.Build
 import net.synergy360.kiosk.BuildConfig
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.view.View
+import android.os.PowerManager
 
 class MainActivity : Activity() {
 
@@ -404,21 +408,35 @@ class MainActivity : Activity() {
                     }
                 }
 
-                "sleep_now" -> {
-                    runOnUiThread { showSleepOverlay() }
-                    ackCommand(cmdId, true, "sleep overlay shown")
-                }
-
-                "wake" -> {
-                    runOnUiThread { removeSleepOverlay() }
-                    ackCommand(cmdId, true, "woke")
-                }
-
                 "ping" -> {
                     // просто подтверждаем что живы
                     ackCommand(cmdId, true, "pong")
                 }
+                "sleep" -> {
+                    val dpm = getSystemService(DevicePolicyManager::class.java)
+                    try {
+                        dpm.lockNow() // мгновенно гасим экран
+                        ack(true, "screen off") // как у тебя принято писать ACK
+                    } catch (e: Exception) {
+                        ack(false, "lockNow failed: ${e.message}")
+                    }
+                }
 
+                "wake" -> {
+                    try {
+                        val pm = getSystemService(PowerManager::class.java)
+                        @Suppress("DEPRECATION")
+                        val wl = pm.newWakeLock(
+                            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                            "kiosk:wake"
+                        )
+                        wl.acquire(3000) // 3 секунды подсветки — достаточно, чтобы «проснуться»
+                        wl.release()
+                        ack(true, "screen on")
+                    } catch (e: Exception) {
+                        ack(false, "wake failed: ${e.message}")
+                    }
+                }
                 else -> {
                     ackCommand(cmdId, false, "unknown command: $cmd")
                 }
@@ -478,6 +496,7 @@ class MainActivity : Activity() {
         // и сразу отметим «я онлайн»
         updateStatus("online")
         heartbeatHandler.post(heartbeatRunnable)
+        enableKioskIfOwner()
     }
 
     override fun onPause() {
@@ -504,6 +523,47 @@ class MainActivity : Activity() {
 
         // 🧩 Обновляем статус устройства
         updateStatus("offline")
+    }
+
+    private fun enableKioskIfOwner() {
+        val dpm = getSystemService(DevicePolicyManager::class.java)
+        val admin = ComponentName(this, MyDeviceAdminReceiver::class.java)
+
+        if (dpm.isDeviceOwnerApp(packageName)) {
+            // Разрешаем наш пакет для lockTask (без диалога App Pin)
+            try { dpm.setLockTaskPackages(admin, arrayOf(packageName)) } catch (_: Throwable) {}
+
+            // Отключаем шторку уведомлений (API 28+)
+            try { dpm.setStatusBarDisabled(admin, true) } catch (_: Throwable) {}
+
+            // Отключаем экран блокировки (чтобы wake был без пина)
+            try { dpm.setKeyguardDisabled(admin, true) } catch (_: Throwable) {}
+
+            // Запускаем киоск-режим (без UI-подтверждения, т.к. мы DO)
+            if (dpm.isLockTaskPermitted(packageName)) {
+                try { startLockTask() } catch (_: Throwable) {}
+            }
+
+            // Полноэкранный иммерсив
+            window.decorView.systemUiVisibility =
+                (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            window.decorView.systemUiVisibility =
+                (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
+        }
     }
 
 
