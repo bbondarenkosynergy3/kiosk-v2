@@ -416,9 +416,9 @@ class MainActivity : Activity() {
                     val dpm = getSystemService(DevicePolicyManager::class.java)
                     try {
                         dpm.lockNow() // мгновенно гасим экран
-                        ackCommand(true, "screen off") // как у тебя принято писать ACK
+                        ackCommand(cmdId, true, "screen off") // ✅ исправлено
                     } catch (e: Exception) {
-                        ackCommand(false, "lockNow failed: ${e.message}")
+                        ackCommand(cmdId, false, "lockNow failed: ${e.message}") // ✅ исправлено
                     }
                 }
 
@@ -430,11 +430,11 @@ class MainActivity : Activity() {
                             PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
                             "kiosk:wake"
                         )
-                        wl.acquire(3000) // 3 секунды подсветки — достаточно, чтобы «проснуться»
+                        wl.acquire(3000)
                         wl.release()
-                        ackCommand(true, "screen on")
+                        ackCommand(cmdId, true, "screen on") // ✅ исправлено
                     } catch (e: Exception) {
-                        ackCommand(false, "wake failed: ${e.message}")
+                        ackCommand(cmdId, false, "wake failed: ${e.message}") // ✅ исправлено
                     }
                 }
                 else -> {
