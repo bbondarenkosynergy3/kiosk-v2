@@ -5,6 +5,9 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+permissions:
+  contents: write  # allows creating GitHub releases
+
 jobs:
   build:
     runs-on: ubuntu-latest
