@@ -22,7 +22,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # 🔐 Restore release keystore from secret (do NOT commit the keystore)
       - name: Decode keystore
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > synergy360-release.keystore
@@ -46,10 +45,14 @@ jobs:
           echo "Keystore path: ${GITHUB_WORKSPACE}/synergy360-release.keystore"
           keytool -list -v -keystore ${GITHUB_WORKSPACE}/synergy360-release.keystore -storepass stpasssynergy360 | head -20
 
+      - name: Check keystore format
+        run: |
+          keytool -list -v -keystore synergy360-release.keystore -storepass stpasssynergy360 | grep "Type"
+          echo "✅ Keystore format verified (JKS or PKCS12)"
+
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
-      # 🏗️ Build signed release APK (Gradle reads signing creds from env in app/build.gradle)
       - name: Build release APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -58,7 +61,6 @@ jobs:
           SIGNING_KEYSTORE_PATH: ${{ env.SIGNING_KEYSTORE_PATH }}
         run: ./gradlew clean assembleRelease
 
-      # 🏷️ Rename APK to include versionName from app/build.gradle (simple parse)
       - name: Rename APK with version
         run: |
           VERSION_NAME=$(grep -E 'versionName\s+"[0-9.]+"' app/build.gradle | head -1 | sed -E 's/.*versionName\s+"([^"]+)".*/\1/')
@@ -66,7 +68,6 @@ jobs:
           mv "$OUTPUT_DIR/app-release.apk" "$OUTPUT_DIR/synergy360-kiosk-release-v${VERSION_NAME}.apk"
           echo "APK_PATH=$OUTPUT_DIR/synergy360-kiosk-release-v${VERSION_NAME}.apk" >> $GITHUB_ENV
 
-      # 🔢 Compute Base64 SHA-256 for QR provisioning
       - name: Compute Base64 SHA-256
         run: |
           HASH=$(shasum -a 256 "$APK_PATH" | awk '{print $1}' | xxd -r -p | base64)
@@ -74,7 +75,6 @@ jobs:
           echo "Base64 SHA-256: $HASH"
           echo "$HASH" > app/build/outputs/apk/release/synergy360-kiosk-release.sha256.base64
 
-      # ⬆️ Upload artifacts (APK + checksum text file)
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
@@ -83,7 +83,6 @@ jobs:
             ${{ env.APK_PATH }}
             app/build/outputs/apk/release/synergy360-kiosk-release.sha256.base64
 
-      # 📦 Create GitHub Release with the APK attached
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
