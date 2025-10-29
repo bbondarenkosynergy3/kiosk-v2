@@ -16,6 +16,7 @@ import android.widget.TextView
 import java.util.*
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
+import com.google.firebase.FirebaseApp
 import android.os.Build
 import net.synergy360.kiosk.BuildConfig
 import com.google.firebase.firestore.ListenerRegistration
