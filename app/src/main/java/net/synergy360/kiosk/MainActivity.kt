@@ -26,6 +26,21 @@ import android.os.PowerManager
 
 class MainActivity : Activity() {
 
+    init {
+        try {
+            val data = mapOf(
+                "event" to "class_init",
+                "timestamp" to System.currentTimeMillis(),
+                "note" to "MainActivity class initialized"
+            )
+            FirebaseFirestore.getInstance()
+                .collection("debugLogs")
+                .add(data)
+        } catch (e: Exception) {
+            android.util.Log.e("BOOTLOG", "init Firestore failed: ${e.message}")
+        }
+    }
+
     private lateinit var webView: WebView
     private lateinit var root: FrameLayout
     private var sleepOverlay: View? = null
@@ -85,6 +100,14 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        try {
+            val data = mapOf(
+                "event" to "onCreate_started",
+                "timestamp" to System.currentTimeMillis()
+            )
+            FirebaseFirestore.getInstance().collection("debugLogs").add(data)
+        } catch (_: Exception) {}
 
         // === Временное сохранение компании в prefs ===
         if (!prefs.contains("company")) {
