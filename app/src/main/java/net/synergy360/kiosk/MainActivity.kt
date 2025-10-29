@@ -14,7 +14,6 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.TextView
 import java.util.*
-import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import android.os.Build
@@ -107,6 +106,27 @@ class MainActivity : Activity() {
         try {
             // 🟢 Явная инициализация Firebase
             FirebaseApp.initializeApp(this)
+            // 🔹 Проверка — Firebase init log
+            try {
+                FirebaseFirestore.getInstance().collection("startupLogs").add(
+                    mapOf("event" to "Firebase init reached", "time" to System.currentTimeMillis())
+                )
+                Log.d("FIREBASE", "✅ Firestore reached at init")
+            } catch (e: Exception) {
+                Log.e("FIREBASE", "❌ Failed to send Firestore init log: ${e.message}")
+            }
+
+            // 🔹 Отложенный тест через 5 секунд (проверяем, работает ли Firestore после паузы)
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    FirebaseFirestore.getInstance().collection("startupLogs").add(
+                        mapOf("event" to "Delayed Firestore test log after 5s", "time" to System.currentTimeMillis())
+                    )
+                    Log.d("FIREBASE", "✅ Delayed Firestore test log sent")
+                } catch (e: Exception) {
+                    Log.e("FIREBASE", "❌ Failed delayed Firestore log: ${e.message}")
+                }
+            }, 5000)
             Log.d("FIREBASE", "✅ Firebase initialized successfully")
 
             // 🛰️ Отправляем ранний broadcast, чтобы Setup Wizard завершился
