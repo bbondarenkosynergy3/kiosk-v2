@@ -7,7 +7,7 @@
 
     <application
         android:label="360 Synergy Kiosk (Pro)"
-        android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+        android:theme="@style/Theme.DeviceDefault.NoActionBar"
         android:resizeableActivity="false">
 
         <activity
@@ -22,6 +22,12 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
         
         <!-- Firebase Cloud Messaging Service -->
@@ -33,6 +39,7 @@
             </intent-filter>
         </service>
 
+        <!--
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
@@ -41,6 +48,7 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+        -->
 
         <receiver
             android:name=".MyDeviceAdminReceiver"
@@ -51,6 +59,8 @@
                 android:resource="@xml/device_admin_receiver" />
             <intent-filter>
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <action android:name="android.app.action.PROVISIONING_SUCCESSFUL" />
+                <action android:name="android.app.action.PROVISIONING_COMPLETE" />
             </intent-filter>
         </receiver>
 

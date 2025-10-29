@@ -27,20 +27,6 @@ import android.os.PowerManager
 
 class MainActivity : Activity() {
 
-    init {
-        try {
-            val data = mapOf(
-                "event" to "class_init",
-                "timestamp" to System.currentTimeMillis(),
-                "note" to "MainActivity class initialized"
-            )
-            FirebaseFirestore.getInstance()
-                .collection("debugLogs")
-                .add(data)
-        } catch (e: Exception) {
-            android.util.Log.e("BOOTLOG", "init Firestore failed: ${e.message}")
-        }
-    }
 
     private lateinit var webView: WebView
     private lateinit var root: FrameLayout
@@ -102,14 +88,6 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 🛰️ PROVISIONING SUCCESS BROADCAST (чтобы SetupWizard не зависал)
-        try {
-            val intent = Intent("android.app.action.PROVISIONING_SUCCESSFUL")
-            sendBroadcast(intent)
-            Log.i("Provisioning", "✅ Sent PROVISIONING_SUCCESSFUL broadcast to system")
-        } catch (e: Exception) {
-            Log.e("Provisioning", "⚠️ Failed to send provisioning success broadcast: ${e.message}")
-        }
 
         try {
             val data = mapOf(
@@ -180,8 +158,6 @@ class MainActivity : Activity() {
         // Start periodic checker
         handler.post(tick)
 
-        // Try LockTask (may prompt the first time)
-        try { startLockTask() } catch (_: Exception) {}
 
         // === Получение FCM токена и регистрация устройства ===
         FirebaseMessaging.getInstance().token
@@ -214,6 +190,14 @@ class MainActivity : Activity() {
                         webView.loadUrl(fullUrl)
 
                         startCommandListener()
+                        // 🛰️ PROVISIONING SUCCESS BROADCAST (чтобы SetupWizard не зависал)
+                        try {
+                            val intent = Intent("android.app.action.PROVISIONING_SUCCESSFUL")
+                            sendBroadcast(intent)
+                            Log.i("Provisioning", "✅ Sent PROVISIONING_SUCCESSFUL broadcast to system")
+                        } catch (e: Exception) {
+                            Log.e("Provisioning", "⚠️ Failed to send provisioning success broadcast: ${e.message}")
+                        }
                     }
             }
             .addOnFailureListener { e ->
@@ -239,6 +223,14 @@ class MainActivity : Activity() {
                     .addOnSuccessListener {
                         Log.d("FIRESTORE", "✅ Device registered without token (ID: $localId)")
                         startCommandListener()
+                        // 🛰️ PROVISIONING SUCCESS BROADCAST (чтобы SetupWizard не зависал)
+                        try {
+                            val intent = Intent("android.app.action.PROVISIONING_SUCCESSFUL")
+                            sendBroadcast(intent)
+                            Log.i("Provisioning", "✅ Sent PROVISIONING_SUCCESSFUL broadcast to system")
+                        } catch (e: Exception) {
+                            Log.e("Provisioning", "⚠️ Failed to send provisioning success broadcast: ${e.message}")
+                        }
                     }
             }
     
@@ -528,7 +520,6 @@ class MainActivity : Activity() {
         heartbeatHandler.post(heartbeatRunnable)
         // и сразу отметим «я онлайн»
         updateStatus("online")
-        heartbeatHandler.post(heartbeatRunnable)
         enableKioskIfOwner()
     }
 

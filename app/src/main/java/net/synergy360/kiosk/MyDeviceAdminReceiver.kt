@@ -12,4 +12,8 @@ class MyDeviceAdminReceiver : DeviceAdminReceiver() {
     override fun onDisabled(context: Context, intent: Intent) {
         Log.i("DeviceOwner", "❌ Device admin disabled")
     }
+    override fun onReceive(context: Context, intent: Intent) {
+        super.onReceive(context, intent)
+        Log.i("DeviceOwner", "📡 Received broadcast: ${intent.action}")
+    }
 }
