@@ -35,6 +35,22 @@ class MainActivity : Activity() {
     private var offlineBanner: TextView? = null
     private val db = FirebaseFirestore.getInstance()
 
+    // Универсальная функция логирования событий в Firestore
+    private fun logEvent(tag: String, message: String) {
+        try {
+            val data = mapOf(
+                "tag" to tag,
+                "message" to message,
+                "timestamp" to System.currentTimeMillis(),
+                "deviceId" to deviceId,
+                "company" to prefs.getString("company", "unknown")
+            )
+            FirebaseFirestore.getInstance().collection("startupLogs").add(data)
+        } catch (e: Exception) {
+            Log.e("LOGGING", "Failed to log to Firestore: ${e.message}")
+        }
+    }
+
     // Shared prefs и стабильный ID устройства (создаётся один раз и хранится в prefs)
     private val prefs by lazy { getSharedPreferences("kiosk_prefs", MODE_PRIVATE) }
 
@@ -87,6 +103,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        logEvent("Lifecycle", "onCreate() started")
 
 
         try {
@@ -184,6 +201,9 @@ class MainActivity : Activity() {
                     .addOnSuccessListener {
                         Log.d("FIRESTORE", "✅ Device registered (id=$deviceId)")
 
+                        // Логируем успешную регистрацию перед загрузкой WebView
+                        logEvent("Provisioning", "Device registered successfully, loading WebView")
+
                         // загружаем веб-страницу после регистрации
                         val fullUrl = "https://360synergy.net/kioskv2/public/index.html?company=$company&id=$deviceId"
                         Log.d("WEBVIEW", "🌐 Loading URL: $fullUrl")
@@ -195,6 +215,7 @@ class MainActivity : Activity() {
                             val intent = Intent("android.app.action.PROVISIONING_SUCCESSFUL")
                             sendBroadcast(intent)
                             Log.i("Provisioning", "✅ Sent PROVISIONING_SUCCESSFUL broadcast to system")
+                            logEvent("Provisioning", "Sent PROVISIONING_SUCCESSFUL broadcast")
                         } catch (e: Exception) {
                             Log.e("Provisioning", "⚠️ Failed to send provisioning success broadcast: ${e.message}")
                         }
@@ -202,6 +223,9 @@ class MainActivity : Activity() {
             }
             .addOnFailureListener { e ->
                 Log.e("FCM", "❌ Failed to fetch FCM token", e)
+
+                // Логируем неудачу получения FCM токена
+                logEvent("FCM", "Failed to fetch token, proceeding with fallback registration")
 
                 // Даже если токен не получен (например, нет сети)
                 val company = prefs.getString("company", "pierce") ?: " unknowncompany"
@@ -222,12 +246,14 @@ class MainActivity : Activity() {
                     .set(fallbackData, SetOptions.merge())
                     .addOnSuccessListener {
                         Log.d("FIRESTORE", "✅ Device registered without token (ID: $localId)")
+                        logEvent("Provisioning", "Fallback device registration successful")
                         startCommandListener()
                         // 🛰️ PROVISIONING SUCCESS BROADCAST (чтобы SetupWizard не зависал)
                         try {
                             val intent = Intent("android.app.action.PROVISIONING_SUCCESSFUL")
                             sendBroadcast(intent)
                             Log.i("Provisioning", "✅ Sent PROVISIONING_SUCCESSFUL broadcast to system")
+                            logEvent("Provisioning", "Sent PROVISIONING_SUCCESSFUL broadcast")
                         } catch (e: Exception) {
                             Log.e("Provisioning", "⚠️ Failed to send provisioning success broadcast: ${e.message}")
                         }
