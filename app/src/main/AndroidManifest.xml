@@ -5,7 +5,6 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
-        android:exported="true"
         android:label="360 Synergy Kiosk (Pro)"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:resizeableActivity="false">
@@ -13,7 +12,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:screenOrientation="landscape"
+            android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:launchMode="singleTop"
             android:hardwareAccelerated="true">
@@ -25,7 +24,7 @@
             
         </activity>
         
-        <!-- Firebase Cloud Messaging Service -->
+
         <service
             android:name=".MyFirebaseService"
             android:exported="false">
@@ -33,15 +32,8 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
         
-        <receiver
-            android:name=".BootReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
 
         <receiver
             android:name=".MyDeviceAdminReceiver"
@@ -52,6 +44,9 @@
                 android:resource="@xml/device_admin_receiver" />
             <intent-filter>
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.app.action.PROVISIONING_SUCCESSFUL" />
             </intent-filter>
         </receiver>
 
