@@ -1,13 +1,13 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="net.synergy360.kiosk">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
+        android:exported="true"
         android:label="360 Synergy Kiosk (Pro)"
-        android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:resizeableActivity="false">
 
         <activity
@@ -23,11 +23,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.HOME" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
         </activity>
         
         <!-- Firebase Cloud Messaging Service -->
@@ -59,8 +54,6 @@
                 android:resource="@xml/device_admin_receiver" />
             <intent-filter>
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
-                <action android:name="android.app.action.PROVISIONING_SUCCESSFUL" />
-                <action android:name="android.app.action.PROVISIONING_COMPLETE" />
             </intent-filter>
         </receiver>
 
