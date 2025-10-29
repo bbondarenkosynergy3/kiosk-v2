@@ -33,8 +33,7 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
-
-        <!--
+        
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
@@ -43,7 +42,6 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
-        -->
 
         <receiver
             android:name=".MyDeviceAdminReceiver"
