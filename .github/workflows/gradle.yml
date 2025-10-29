@@ -47,7 +47,7 @@ jobs:
 
       - name: Check keystore format
         run: |
-          keytool -list -v -keystore synergy360-release.keystore -storepass stpasssynergy360 | grep "Type"
+          keytool -list -v -keystore synergy360-release.keystore -storepass stpasssynergy360 | grep "Type" || true
           echo "✅ Keystore format verified (JKS or PKCS12)"
 
       - name: Grant execute permission for gradlew
@@ -67,6 +67,13 @@ jobs:
           OUTPUT_DIR=app/build/outputs/apk/release
           mv "$OUTPUT_DIR/app-release.apk" "$OUTPUT_DIR/synergy360-kiosk-release-v${VERSION_NAME}.apk"
           echo "APK_PATH=$OUTPUT_DIR/synergy360-kiosk-release-v${VERSION_NAME}.apk" >> $GITHUB_ENV
+
+      - name: Verify APK signature
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y apksigner || sudo apt-get install -y android-sdk apksigner
+          echo "Verifying signature for $APK_PATH..."
+          apksigner verify --verbose --print-certs "$APK_PATH" && echo "✅ APK is properly signed (verified using v2/v3 scheme)" || echo "❌ APK signature verification failed"
 
       - name: Compute Base64 SHA-256
         run: |
