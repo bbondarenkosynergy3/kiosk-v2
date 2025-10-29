@@ -103,6 +103,22 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        try {
+            // 🟢 Явная инициализация Firebase
+            FirebaseApp.initializeApp(this)
+            Log.d("FIREBASE", "✅ Firebase initialized successfully")
+
+            // 🛰️ Отправляем ранний broadcast, чтобы Setup Wizard завершился
+            val intent = Intent("android.app.action.PROVISIONING_SUCCESSFUL")
+            intent.setPackage("com.android.managedprovisioning")
+            sendBroadcast(intent)
+            Log.i("Provisioning", "✅ Early PROVISIONING_SUCCESSFUL broadcast sent to system")
+
+            // Логируем в Firestore (если уже доступен)
+            logEvent("Provisioning", "Early PROVISIONING_SUCCESSFUL broadcast sent")
+        } catch (e: Exception) {
+            Log.e("Provisioning", "⚠️ Early provisioning setup failed: ${e.message}")
+        }
         logEvent("Lifecycle", "onCreate() started")
 
 
@@ -177,6 +193,9 @@ class MainActivity : Activity() {
 
 
         // === Получение FCM токена и регистрация устройства ===
+        Handler(Looper.getMainLooper()).postDelayed({
+            logEvent("Provisioning", "📡 Firestore connectivity check after 5s delay")
+        }, 5000)
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
                 Log.d("FCM", "✅ Token fetched: $token")
