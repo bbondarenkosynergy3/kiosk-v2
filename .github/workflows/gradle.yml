@@ -1,39 +1,75 @@
-name: Build Android APK
+name: Build Signed Android APK
 
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x ./gradlew
+      # 🔐 Restore release keystore from secret (do NOT commit the keystore)
+      - name: Decode keystore
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > synergy360-release.keystore
+          echo "SIGNING_KEYSTORE_PATH=$GITHUB_WORKSPACE/synergy360-release.keystore" >> $GITHUB_ENV
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
-    - name: Build debug APK
-      run: ./gradlew assembleDebug
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
 
-    - name: Rename APK with version
-      run: |
-        VERSION_CODE=${GITHUB_RUN_NUMBER}
-        OUTPUT_DIR=app/build/outputs/apk/debug
-        mv "$OUTPUT_DIR/app-debug.apk" "$OUTPUT_DIR/app-debug-v${VERSION_CODE}.apk"
+      # 🏗️ Build signed release APK (Gradle reads signing creds from env in app/build.gradle)
+      - name: Build release APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SIGNING_KEYSTORE_PATH: ${{ env.SIGNING_KEYSTORE_PATH }}
+        run: ./gradlew clean assembleRelease
 
-    - name: Upload APK artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: synergy360-kiosk-debug-v${{ github.run_number }}
-        path: app/build/outputs/apk/debug/app-debug-v${{ github.run_number }}.apk
+      # 🏷️ Rename APK to include versionName from app/build.gradle (simple parse)
+      - name: Rename APK with version
+        run: |
+          VERSION_NAME=$(grep -E 'versionName\s+"[0-9.]+"' app/build.gradle | head -1 | sed -E 's/.*versionName\s+"([^"]+)".*/\1/')
+          OUTPUT_DIR=app/build/outputs/apk/release
+          mv "$OUTPUT_DIR/app-release.apk" "$OUTPUT_DIR/synergy360-kiosk-release-v${VERSION_NAME}.apk"
+          echo "APK_PATH=$OUTPUT_DIR/synergy360-kiosk-release-v${VERSION_NAME}.apk" >> $GITHUB_ENV
+
+      # 🔢 Compute Base64 SHA-256 for QR provisioning
+      - name: Compute Base64 SHA-256
+        run: |
+          HASH=$(shasum -a 256 "$APK_PATH" | awk '{print $1}' | xxd -r -p | base64)
+          echo "APK_SHA256_BASE64=$HASH" >> $GITHUB_ENV
+          echo "Base64 SHA-256: $HASH"
+          echo "$HASH" > app/build/outputs/apk/release/synergy360-kiosk-release.sha256.base64
+
+      # ⬆️ Upload artifacts (APK + checksum text file)
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: synergy360-kiosk-release
+          path: |
+            ${{ env.APK_PATH }}
+            app/build/outputs/apk/release/synergy360-kiosk-release.sha256.base64
+
+      # 📦 Create GitHub Release with the APK attached
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: "Synergy360 Kiosk v${{ github.run_number }}"
+          files: ${{ env.APK_PATH }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

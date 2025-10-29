@@ -5,6 +5,7 @@ plugins {
 }
 
 android {
+
     namespace "net.synergy360.kiosk"
     compileSdk 34
 
@@ -15,10 +16,20 @@ android {
         versionCode 12
         versionName "1.12"
     }
+    
+    signingConfigs {
+        release {
+            storeFile file("${rootDir}/synergy360-release.keystore")
+            storePassword System.getenv("KEYSTORE_PASSWORD") ?: "stpasssynergy360"
+            keyAlias System.getenv("KEY_ALIAS") ?: "synergy360"
+            keyPassword System.getenv("KEY_PASSWORD") ?: "keypasssynergy360"
+        }
+    }
 
     buildTypes {
         release {
             minifyEnabled false
+            signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
