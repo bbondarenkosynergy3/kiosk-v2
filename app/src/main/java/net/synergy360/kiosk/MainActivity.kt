@@ -416,9 +416,9 @@ class MainActivity : Activity() {
                     val dpm = getSystemService(DevicePolicyManager::class.java)
                     try {
                         dpm.lockNow() // мгновенно гасим экран
-                        ack(true, "screen off") // как у тебя принято писать ACK
+                        ackCommand(true, "screen off") // как у тебя принято писать ACK
                     } catch (e: Exception) {
-                        ack(false, "lockNow failed: ${e.message}")
+                        ackCommand(false, "lockNow failed: ${e.message}")
                     }
                 }
 
@@ -432,9 +432,9 @@ class MainActivity : Activity() {
                         )
                         wl.acquire(3000) // 3 секунды подсветки — достаточно, чтобы «проснуться»
                         wl.release()
-                        ack(true, "screen on")
+                        ackCommand(true, "screen on")
                     } catch (e: Exception) {
-                        ack(false, "wake failed: ${e.message}")
+                        ackCommand(false, "wake failed: ${e.message}")
                     }
                 }
                 else -> {
