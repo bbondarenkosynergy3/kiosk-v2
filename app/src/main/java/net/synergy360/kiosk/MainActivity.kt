@@ -1,6 +1,7 @@
 package net.synergy360.kiosk
 
 import android.app.Activity
+import android.content.Intent
 import android.util.Log
 import android.app.AlertDialog
 import android.graphics.Color
@@ -100,6 +101,15 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 🛰️ PROVISIONING SUCCESS BROADCAST (чтобы SetupWizard не зависал)
+        try {
+            val intent = Intent("android.app.action.PROVISIONING_SUCCESSFUL")
+            sendBroadcast(intent)
+            Log.i("Provisioning", "✅ Sent PROVISIONING_SUCCESSFUL broadcast to system")
+        } catch (e: Exception) {
+            Log.e("Provisioning", "⚠️ Failed to send provisioning success broadcast: ${e.message}")
+        }
 
         try {
             val data = mapOf(
