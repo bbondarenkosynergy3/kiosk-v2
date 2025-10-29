@@ -39,6 +39,13 @@ jobs:
             exit 1
           fi
 
+      - name: Debug keystore path
+        run: |
+          ls -la ${GITHUB_WORKSPACE}
+          ls -la ${GITHUB_WORKSPACE}/app || true
+          echo "Keystore path: ${GITHUB_WORKSPACE}/synergy360-release.keystore"
+          keytool -list -v -keystore ${GITHUB_WORKSPACE}/synergy360-release.keystore -storepass stpasssynergy360 | head -20
+
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
