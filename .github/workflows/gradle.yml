@@ -30,6 +30,15 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
+      - name: Verify keystore exists
+        run: |
+          if [ -f synergy360-release.keystore ]; then
+            echo "✅ Keystore found: $(ls -lh synergy360-release.keystore)"
+          else
+            echo "❌ Keystore missing!"
+            exit 1
+          fi
+
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
