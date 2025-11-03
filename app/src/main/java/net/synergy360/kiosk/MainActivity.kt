@@ -154,8 +154,8 @@ class MainActivity : Activity() {
 
         // === Временное сохранение компании в prefs ===
         if (!prefs.contains("company")) {
-            prefs.edit().putString("company", "pierce").apply()
-            Log.d("SETUP", "✅ Default company saved to prefs: pierce")
+            prefs.edit().putString("company", "synergy3").apply()
+            Log.d("SETUP", "✅ Default company saved to prefs: synergy3")
         } else {
             Log.d("SETUP", "✅ Company already in prefs: ${prefs.getString("company", "unknown")}")
         }
@@ -223,7 +223,7 @@ class MainActivity : Activity() {
                 Log.d("FCM", "✅ Token fetched: $token")
 
                 // данные для Firestore при первой регистрации устройства
-                val company = prefs.getString("company", "pierce") ?: " unknowncompany"
+                val company = prefs.getString("company", "synergy3") ?: " unknowncompany"
                 val data = mapOf(
                     "company" to company,
                     "token" to token,
@@ -246,7 +246,7 @@ class MainActivity : Activity() {
                         logEvent("Provisioning", "Device registered successfully, loading WebView")
 
                         // загружаем веб-страницу после регистрации
-                        val fullUrl = "https://360synergy.net/kioskv2/public/index.html?company=$company&id=$deviceId"
+                        val fullUrl = "https://360synergy.net/kiosk3/public/feedback.html?company=$company&id=$deviceId"
                         Log.d("WEBVIEW", "🌐 Loading URL: $fullUrl")
                         webView.loadUrl(fullUrl)
 
@@ -564,7 +564,7 @@ class MainActivity : Activity() {
             "timestamp" to now
         )
 
-        val company = prefs.getString("company", "pierce") ?: " unknowncompany"
+        val company = prefs.getString("company", "synergy3") ?: " unknowncompany"
         db.collection("company").document(company).collection("devices").document(deviceId)
             .set(updateData, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener {
