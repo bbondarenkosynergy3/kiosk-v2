@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write  # allows creating GitHub releases
+  contents: write
 
 jobs:
   build:
@@ -32,23 +32,11 @@ jobs:
       - name: Verify keystore exists
         run: |
           if [ -f synergy360-release.keystore ]; then
-            echo "✅ Keystore found: $(ls -lh synergy360-release.keystore)"
+            echo "Keystore OK"
           else
-            echo "❌ Keystore missing!"
+            echo "Keystore missing"
             exit 1
           fi
-
-      - name: Debug keystore path
-        run: |
-          ls -la ${GITHUB_WORKSPACE}
-          ls -la ${GITHUB_WORKSPACE}/app || true
-          echo "Keystore path: ${GITHUB_WORKSPACE}/synergy360-release.keystore"
-          keytool -list -v -keystore ${GITHUB_WORKSPACE}/synergy360-release.keystore -storepass stpasssynergy360 | head -20
-
-      - name: Check keystore format
-        run: |
-          keytool -list -v -keystore synergy360-release.keystore -storepass stpasssynergy360 | grep "Type" || true
-          echo "✅ Keystore format verified (JKS or PKCS12)"
 
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
@@ -66,26 +54,22 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           SIGNING_KEYSTORE_PATH: ${{ env.SIGNING_KEYSTORE_PATH }}
         run: ./gradlew clean assembleRelease --no-build-cache --rerun-tasks
-       
+
       - name: Debug APK output
-        run: |
-          echo "=== APK OUTPUT DIRS ==="
-          ls -R app/build/outputs
-          
+        run: ls -R app/build/outputs/apk/release
+
       - name: Rename APK with version
         run: |
-          VERSION_NAME=$(grep -E 'versionName\s+"[0-9.]+"' app/build.gradle | head -1 | sed -E 's/.*versionName\s+"([^"]+)".*/\1/')
-          OUTPUT_DIR=app/build/outputs/apk/release
-          mv "$OUTPUT_DIR/app-release.apk" "$OUTPUT_DIR/synergy360-kiosk-release-v${VERSION_NAME}.apk"
-          echo "APK_PATH=$OUTPUT_DIR/synergy360-kiosk-release-v${VERSION_NAME}.apk" >> $GITHUB_ENV
-
+          VERSION_NAME=$(grep -E 'versionName\\s+"[0-9.]+"' app/build.gradle | head -1 | sed -E 's/.*versionName\\s+"([^"]+)".*/\\1/')
+          FINAL_APK="synergy360-kiosk-release-v${VERSION_NAME}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$FINAL_APK"
+          echo "APK_PATH=$FINAL_APK" >> $GITHUB_ENV
 
       - name: Compute Base64 SHA-256
         run: |
           HASH=$(shasum -a 256 "$APK_PATH" | awk '{print $1}' | xxd -r -p | base64)
           echo "APK_SHA256_BASE64=$HASH" >> $GITHUB_ENV
-          echo "Base64 SHA-256: $HASH"
-          echo "$HASH" > app/build/outputs/apk/release/synergy360-kiosk-release.sha256.base64
+          echo "$HASH" > synergy360-kiosk-release.sha256.base64
 
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
@@ -93,7 +77,7 @@ jobs:
           name: synergy360-kiosk-release
           path: |
             ${{ env.APK_PATH }}
-            app/build/outputs/apk/release/synergy360-kiosk-release.sha256.base64
+            synergy360-kiosk-release.sha256.base64
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
