@@ -53,13 +53,16 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
+      - name: Clean previous build artifacts
+        run: rm -rf app/build/
+
       - name: Build release APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           SIGNING_KEYSTORE_PATH: ${{ env.SIGNING_KEYSTORE_PATH }}
-        run: ./gradlew clean assembleRelease
+        run: ./gradlew clean assembleRelease --no-build-cache --rerun-tasks
 
       - name: Rename APK with version
         run: |
