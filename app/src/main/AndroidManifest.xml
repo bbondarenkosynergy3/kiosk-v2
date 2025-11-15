@@ -1,9 +1,14 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_ADMINS" />
+    
+    <!-- ВАЖНО: разрешение для Device Admin / Device Owner -->
+    <uses-permission
+        android:name="android.permission.BIND_DEVICE_ADMIN"
+        tools:ignore="ProtectedPermissions" />
 
     <application
         android:name=".AppContextHolder"
