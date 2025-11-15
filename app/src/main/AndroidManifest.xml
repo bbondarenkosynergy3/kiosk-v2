@@ -11,7 +11,7 @@
         tools:ignore="ProtectedPermissions" />
 
     <application
-        android:name=".AppContextHolder"
+        <!-- android:name=".AppContextHolder" -->
         android:label="360 Synergy Kiosk (Pro)"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:resizeableActivity="false">
