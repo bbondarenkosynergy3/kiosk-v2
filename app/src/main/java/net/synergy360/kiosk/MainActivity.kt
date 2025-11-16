@@ -172,24 +172,39 @@ class MainActivity : Activity() {
         root = FrameLayout(this)
         setContentView(root)
 
-        // WebView
-        webView = WebView(this)
-        webView.settings.javaScriptEnabled = true
-        webView.settings.domStorageEnabled = true
-        webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
-            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                showOffline("Reconnecting…")
+        if (Build.VERSION.SDK_INT >= 28) {
+            try {
+                WebView.setDataDirectorySuffix("kiosk")
+            } catch (e: Exception) {
+                Log.e("WEBVIEW", "Failed to setDataDirectorySuffix: ${e.message}")
             }
-            override fun onPageFinished(view: WebView?, url: String?) { hideOffline() }
         }
 
+        fun initWebViewSafe() {
+            webView = WebView(this)
+            webView.settings.javaScriptEnabled = true
+            webView.settings.domStorageEnabled = true
+            webView.webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
+                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                    showOffline("Reconnecting…")
+                }
+                override fun onPageFinished(view: WebView?, url: String?) { hideOffline() }
+            }
 
+            root.addView(
+                webView,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
 
-        root.addView(webView, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT
-        ))
+        Handler(Looper.getMainLooper()).postDelayed({
+            Log.d("WEBVIEW", "⏳ Delayed WebView init (2s)")
+            initWebViewSafe()
+        }, 2000)
 
         // Touch layer: admin gesture + tap-to-wake
         val touchLayer = object : View(this) {
