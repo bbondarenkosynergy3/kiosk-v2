@@ -36,6 +36,62 @@ class MainActivity : Activity() {
     private var offlineBanner: TextView? = null
     private val db = FirebaseFirestore.getInstance()
 
+    // === Safe WebView init with retries for DO/Knox ===
+    private var webViewInitialized = false
+
+    private fun initWebViewSafeWithRetry(retryCount: Int = 0) {
+        if (webViewInitialized) return
+
+        try {
+            if (Build.VERSION.SDK_INT >= 28) {
+                try {
+                    WebView.setDataDirectorySuffix("kiosk")
+                } catch (e: Exception) {
+                    Log.e("WEBVIEW", "setDataDirectorySuffix failed: ${e.message}")
+                }
+            }
+
+            webView = WebView(this)
+            webView.settings.javaScriptEnabled = true
+            webView.settings.domStorageEnabled = true
+            webView.webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
+
+                override fun onReceivedError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    error: WebResourceError
+                ) {
+                    showOffline("Reconnecting…")
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    hideOffline()
+                }
+            }
+
+            root.addView(
+                webView,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+
+            webViewInitialized = true
+            Log.d("WEBVIEW", "✅ WebView initialized")
+        } catch (t: Throwable) {
+            Log.e("WEBVIEW", "WebView init failed (retryCount=$retryCount): ${t.message}")
+            if (retryCount < 5) {
+                Handler(Looper.getMainLooper()).postDelayed({
+                    initWebViewSafeWithRetry(retryCount + 1)
+                }, 3000)
+            } else {
+                showOffline("Web engine not ready")
+            }
+        }
+    }
+
     // Универсальная функция логирования событий в Firestore
     private fun logEvent(tag: String, message: String) {
         try {
@@ -172,39 +228,6 @@ class MainActivity : Activity() {
         root = FrameLayout(this)
         setContentView(root)
 
-        if (Build.VERSION.SDK_INT >= 28) {
-            try {
-                WebView.setDataDirectorySuffix("kiosk")
-            } catch (e: Exception) {
-                Log.e("WEBVIEW", "Failed to setDataDirectorySuffix: ${e.message}")
-            }
-        }
-
-        fun initWebViewSafe() {
-            webView = WebView(this)
-            webView.settings.javaScriptEnabled = true
-            webView.settings.domStorageEnabled = true
-            webView.webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
-                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                    showOffline("Reconnecting…")
-                }
-                override fun onPageFinished(view: WebView?, url: String?) { hideOffline() }
-            }
-
-            root.addView(
-                webView,
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT
-                )
-            )
-        }
-
-        Handler(Looper.getMainLooper()).postDelayed({
-            Log.d("WEBVIEW", "⏳ Delayed WebView init (2s)")
-            initWebViewSafe()
-        }, 2000)
 
         // Touch layer: admin gesture + tap-to-wake
         val touchLayer = object : View(this) {
@@ -260,10 +283,20 @@ class MainActivity : Activity() {
                         // Логируем успешную регистрацию перед загрузкой WebView
                         logEvent("Provisioning", "Device registered successfully, loading WebView")
 
-                        // загружаем веб-страницу после регистрации
+                        // загружаем веб-страницу после регистрации (через безопасную инициализацию WebView)
                         val fullUrl = "https://360synergy.net/kiosk3/public/feedback.html?company=$company&id=$deviceId"
-                        Log.d("WEBVIEW", "🌐 Loading URL: $fullUrl")
-                        webView.loadUrl(fullUrl)
+                        Log.d("WEBVIEW", "🌐 Preparing WebView for URL: $fullUrl")
+
+                        initWebViewSafeWithRetry()
+
+                        Handler(Looper.getMainLooper()).post {
+                            if (this::webView.isInitialized) {
+                                Log.d("WEBVIEW", "🌐 Loading URL into WebView: $fullUrl")
+                                webView.loadUrl(fullUrl)
+                            } else {
+                                Log.e("WEBVIEW", "WebView is not initialized yet, cannot load $fullUrl")
+                            }
+                        }
 
                         startCommandListener()
                         // 🛰️ PROVISIONING SUCCESS BROADCAST (чтобы SetupWizard не зависал)
