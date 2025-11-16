@@ -23,6 +23,12 @@ class MyDeviceAdminReceiver : DeviceAdminReceiver() {
             Log.e("DeviceOwner", "Failed to log device admin enabled to Firestore: ${e.message}")
         }
     }
+    override fun onProfileProvisioningComplete(context: Context, intent: Intent) {
+        Log.i("DeviceOwner", "🎉 Provisioning complete — launching MainActivity")
+        val launch = Intent(context, MainActivity::class.java)
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(launch)
+    }
     override fun onDisabled(context: Context, intent: Intent) {
         Log.i("DeviceOwner", "❌ Device admin disabled")
     }
