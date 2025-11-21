@@ -227,6 +227,8 @@ class MainActivity : Activity() {
 
         root = FrameLayout(this)
         setContentView(root)
+        initWebViewSafeWithRetry()
+        Log.d("WEBVIEW", "🔧 Early WebView init called after setContentView")
 
 
         // Touch layer: admin gesture + tap-to-wake
@@ -630,7 +632,11 @@ class MainActivity : Activity() {
             View.SYSTEM_UI_FLAG_FULLSCREEN or
             View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
         handler.post(tick)
-        webView.onResume()
+        if (this::webView.isInitialized) {
+            webView.onResume()
+        } else {
+            Log.e("WEBVIEW", "onResume: webView not initialized")
+        }
         // ⚡️ стартуем heartbeat-таймер
         heartbeatHandler.post(heartbeatRunnable)
         // и сразу отметим «я онлайн»
@@ -641,7 +647,11 @@ class MainActivity : Activity() {
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(tick)
-        webView.onPause()
+        if (this::webView.isInitialized) {
+            webView.onPause()
+        } else {
+            Log.e("WEBVIEW", "onPause: webView not initialized")
+        }
 
         // 🛑 останавливаем heartbeat-таймер
         heartbeatHandler.removeCallbacks(heartbeatRunnable)
