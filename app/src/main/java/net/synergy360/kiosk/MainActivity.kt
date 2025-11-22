@@ -18,13 +18,11 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.FirebaseApp
 import android.os.Build
-import net.synergy360.kiosk.BuildConfig
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.os.PowerManager
-import android.app.PendingIntent
 
 class MainActivity : Activity() {
 
@@ -112,7 +110,6 @@ class MainActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("kiosk_prefs", MODE_PRIVATE) }
 
     private val deviceId: String by lazy {
-        // не завязан на токен/версию apk → не меняется при обновлениях
         prefs.getString("device_id", null) ?: run {
             val id = "${Build.MODEL}_${UUID.randomUUID().toString().take(8)}"
             prefs.edit().putString("device_id", id).apply()
@@ -120,9 +117,9 @@ class MainActivity : Activity() {
         }
     }
 
-    // === HEARTBEAT (обновление статуса каждые 30 сек — сейчас так задано) ===
+    // === HEARTBEAT (обновление статуса каждые 30 сек) ===
     private val heartbeatHandler = Handler(Looper.getMainLooper())
-    private val heartbeatInterval = 1 * 30 * 1000L // 30 секунд (ты можешь поменять комментарий или значение)
+    private val heartbeatInterval = 30_000L // 30 секунд
     private val heartbeatRunnable = object : Runnable {
         override fun run() {
             sendHeartbeat()
@@ -145,9 +142,8 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
-            // 🟢 Явная инициализация Firebase
+            // Firebase init
             FirebaseApp.initializeApp(this)
-            // 🔹 Проверка — Firebase init log
             try {
                 FirebaseFirestore.getInstance().collection("startupLogs").add(
                     mapOf(
@@ -160,7 +156,6 @@ class MainActivity : Activity() {
                 Log.e("FIREBASE", "❌ Failed to send Firestore init log: ${e.message}")
             }
 
-            // 🔹 Отложенный тест через 5 секунд (проверяем, работает ли Firestore после паузы)
             Handler(Looper.getMainLooper()).postDelayed({
                 try {
                     FirebaseFirestore.getInstance().collection("startupLogs").add(
@@ -176,13 +171,11 @@ class MainActivity : Activity() {
             }, 5000)
             Log.d("FIREBASE", "✅ Firebase initialized successfully")
 
-            // 🛰️ Отправляем ранний broadcast, чтобы Setup Wizard завершился
+            // Ранний PROVISIONING_SUCCESSFUL
             val intent = Intent("android.app.action.PROVISIONING_SUCCESSFUL")
             intent.setPackage("com.android.managedprovisioning")
             sendBroadcast(intent)
             Log.i("Provisioning", "✅ Early PROVISIONING_SUCCESSFUL broadcast sent to system")
-
-            // Логируем в Firestore (если уже доступен)
             logEvent("Provisioning", "Early PROVISIONING_SUCCESSFUL broadcast sent")
         } catch (e: Exception) {
             Log.e("Provisioning", "⚠️ Early provisioning setup failed: ${e.message}")
@@ -195,10 +188,9 @@ class MainActivity : Activity() {
                 "timestamp" to System.currentTimeMillis()
             )
             FirebaseFirestore.getInstance().collection("debugLogs").add(data)
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) { }
 
-        // === Временное сохранение компании в prefs ===
+        // company в prefs
         if (!prefs.contains("company")) {
             prefs.edit().putString("company", "synergy3").apply()
             Log.d("SETUP", "✅ Default company saved to prefs: synergy3")
@@ -215,7 +207,7 @@ class MainActivity : Activity() {
                 View.SYSTEM_UI_FLAG_FULLSCREEN or
                 View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
 
-        // Keep screen on while app is running (prevents system timeout)
+        // Не даём экрану гаснуть, пока приложение активно
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         root = FrameLayout(this)
@@ -223,7 +215,7 @@ class MainActivity : Activity() {
         initWebViewSafeWithRetry()
         Log.d("WEBVIEW", "🔧 Early WebView init called after setContentView")
 
-        // Touch layer: admin gesture
+        // Touch layer: только админ-жест
         val touchLayer = object : View(this) {
             override fun onTouchEvent(e: MotionEvent?): Boolean {
                 if (e?.action == MotionEvent.ACTION_DOWN) {
@@ -233,13 +225,14 @@ class MainActivity : Activity() {
             }
         }
         root.addView(
-            touchLayer, FrameLayout.LayoutParams(
+            touchLayer,
+            FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
 
-        // === Получение FCM токена и регистрация устройства ===
+        // FCM токен + регистрация
         Handler(Looper.getMainLooper()).postDelayed({
             logEvent("Provisioning", "📡 Firestore connectivity check after 5s delay")
         }, 5000)
@@ -292,7 +285,6 @@ class MainActivity : Activity() {
                         }
 
                         startCommandListener()
-                        // 🛰️ PROVISIONING SUCCESS BROADCAST
                         try {
                             val intent2 =
                                 Intent("android.app.action.PROVISIONING_SUCCESSFUL")
@@ -361,6 +353,23 @@ class MainActivity : Activity() {
             }
     }
 
+    // --- Wake helper: имитация нажатия Power для пробуждения ---
+    private fun wakeDeviceLikePowerButton() {
+        try {
+            val pm = getSystemService(PowerManager::class.java)
+            @Suppress("DEPRECATION")
+            val wl = pm.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "kiosk:wake_command"
+            )
+            wl.acquire(3000)
+            wl.release()
+            Log.d("WAKE", "✅ wakeDeviceLikePowerButton executed")
+        } catch (e: Exception) {
+            Log.e("WAKE", "wakeDeviceLikePowerButton failed: ${e.message}")
+        }
+    }
+
     // Offline banner
     private fun showOffline(text: String) {
         if (offlineBanner == null) {
@@ -420,10 +429,7 @@ class MainActivity : Activity() {
             .setTitle("Exit kiosk mode?")
             .setMessage("Close the app and leave fullscreen.")
             .setPositiveButton("Yes") { _, _ ->
-                try {
-                    stopLockTask()
-                } catch (_: Exception) {
-                }
+                try { stopLockTask() } catch (_: Exception) {}
                 finish()
             }
             .setNegativeButton("No", null)
@@ -522,19 +528,8 @@ class MainActivity : Activity() {
                 }
 
                 "wake" -> {
-                    try {
-                        val pm = getSystemService(PowerManager::class.java)
-                        @Suppress("DEPRECATION")
-                        val wl = pm.newWakeLock(
-                            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                            "kiosk:wake_command"
-                        )
-                        wl.acquire(3000)
-                        wl.release()
-                        ackCommand(cmdId, true, "screen on")
-                    } catch (e: Exception) {
-                        ackCommand(cmdId, false, "wake failed: ${e.message}")
-                    }
+                    wakeDeviceLikePowerButton()
+                    ackCommand(cmdId, true, "screen on")
                 }
 
                 "update_now" -> {
@@ -654,26 +649,12 @@ class MainActivity : Activity() {
         val admin = ComponentName(this, MyDeviceAdminReceiver::class.java)
 
         if (dpm.isDeviceOwnerApp(packageName)) {
-            try {
-                dpm.setLockTaskPackages(admin, arrayOf(packageName))
-            } catch (_: Throwable) {
-            }
-
-            try {
-                dpm.setStatusBarDisabled(admin, true)
-            } catch (_: Throwable) {
-            }
-
-            try {
-                dpm.setKeyguardDisabled(admin, true)
-            } catch (_: Throwable) {
-            }
+            try { dpm.setLockTaskPackages(admin, arrayOf(packageName)) } catch (_: Throwable) { }
+            try { dpm.setStatusBarDisabled(admin, true) } catch (_: Throwable) { }
+            try { dpm.setKeyguardDisabled(admin, true) } catch (_: Throwable) { }
 
             if (dpm.isLockTaskPermitted(packageName)) {
-                try {
-                    startLockTask()
-                } catch (_: Throwable) {
-                }
+                try { startLockTask() } catch (_: Throwable) { }
             }
 
             window.decorView.systemUiVisibility =
