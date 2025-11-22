@@ -569,19 +569,11 @@ class MainActivity : Activity() {
                 }
                 
                 "wake" -> {
-                    val dpm = getSystemService(DevicePolicyManager::class.java)
-                    val admin = ComponentName(this, MyDeviceAdminReceiver::class.java)
-                
                     try {
                         val pm = getSystemService(PowerManager::class.java)
                 
-                        if (dpm.isDeviceOwnerApp(packageName)) {
-                            try {
-                                // На всякий случай отключаем keyguard, чтобы не было PIN
-                                dpm.setKeyguardDisabled(admin, true)
-                            } catch (_: Throwable) {}
-                
-                            // Android 14 позволяет DO-приложению использовать wakeUp()
+                        // === API 33+ — современный wakeUp() ===
+                        if (Build.VERSION.SDK_INT >= 33) {
                             try {
                                 pm.wakeUp(
                                     SystemClock.uptimeMillis(),
@@ -589,28 +581,23 @@ class MainActivity : Activity() {
                                     "kiosk:wake"
                                 )
                                 ackCommand(cmdId, true, "screen on (wakeUp)")
+                                return@addSnapshotListener
                             } catch (e: Exception) {
-                                // fallback: старый wakelock
-                                @Suppress("DEPRECATION")
-                                val wl = pm.newWakeLock(
-                                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                                    "kiosk:wake_fallback"
-                                )
-                                wl.acquire(3000)
-                                wl.release()
-                                ackCommand(cmdId, true, "screen on (wakelock fallback)")
+                                Log.e("WAKE", "wakeUp() failed: ${e.message}")
                             }
-                        } else {
-                            // если вдруг не DO
-                            @Suppress("DEPRECATION")
-                            val wl = pm.newWakeLock(
-                                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                                "kiosk:wake_no_do"
-                            )
-                            wl.acquire(3000)
-                            wl.release()
-                            ackCommand(cmdId, true, "screen on (no DO)")
                         }
+                
+                        // === Fallback для Android 30–32 (и если wakeUp failed) ===
+                        @Suppress("DEPRECATION")
+                        val wl = pm.newWakeLock(
+                            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                            "kiosk:wake_fallback"
+                        )
+                        wl.acquire(3000)
+                        wl.release()
+                
+                        ackCommand(cmdId, true, "screen on (wakelock fallback)")
+                
                     } catch (e: Exception) {
                         ackCommand(cmdId, false, "wake failed: ${e.message}")
                     }
