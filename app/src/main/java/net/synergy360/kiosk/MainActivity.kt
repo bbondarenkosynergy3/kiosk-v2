@@ -25,6 +25,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.view.View
 import android.os.PowerManager
+import android.app.PendingIntent
 
 class MainActivity : Activity() {
 
