@@ -579,6 +579,15 @@ class MainActivity : Activity() {
                         ackCommand(cmdId, false, "wake failed: ${e.message}") // ✅ исправлено
                     }
                 }
+                "update_now" -> {
+                    val url = "https://github.com/bbondarenkosynergy3/kiosk-v2/releases/latest/download/synergy360-kiosk-release-v.apk"
+                    try {
+                        startUpdate(url)
+                        ackCommand(cmdId, true, "update started")
+                    } catch (e: Exception) {
+                        ackCommand(cmdId, false, "update failed: ${e.message}")
+                    }
+                }
                 else -> {
                     ackCommand(cmdId, false, "unknown command: $cmd")
                 }
@@ -603,6 +612,47 @@ class MainActivity : Activity() {
             .addOnFailureListener { e ->
                 Log.e("COMMANDS", "ACK failed", e)
             }
+    }
+
+    private fun startUpdate(url: String) {
+        Thread {
+            try {
+                val connection = java.net.URL(url).openConnection()
+                connection.connect()
+                val input = connection.getInputStream()
+
+                val file = java.io.File(cacheDir, "update.apk")
+                val output = java.io.FileOutputStream(file)
+
+                input.copyTo(output)
+                output.flush()
+                output.close()
+                input.close()
+
+                val packageInstaller = packageManager.packageInstaller
+                val params = android.content.pm.PackageInstaller.SessionParams(
+                    android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL
+                )
+                val sessionId = packageInstaller.createSession(params)
+                val session = packageInstaller.openSession(sessionId)
+
+                val out = session.openWrite("package", 0, -1)
+                java.io.FileInputStream(file).use { it.copyTo(out) }
+                session.fsync(out)
+                out.close()
+
+                val intent = Intent(this, javaClass)
+                intent.action = "com.android.packageinstaller.ACTION_INSTALL_COMMIT"
+                val pending = PendingIntent.getActivity(
+                    this, 0, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                )
+                session.commit(pending.intentSender)
+                session.close()
+            } catch (e: Exception) {
+                Log.e("UPDATE", "Update failed: ${e.message}")
+            }
+        }.start()
     }
 
     private fun sendHeartbeat() {
