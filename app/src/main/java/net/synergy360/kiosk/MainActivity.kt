@@ -583,7 +583,7 @@ class MainActivity : Activity() {
                 "update_now" -> {
                     val url = "https://github.com/bbondarenkosynergy3/kiosk-v2/releases/latest/download/synergy360-kiosk-release-v.apk"
                     try {
-                        startUpdate(url)
+                        UpdateHelper(this).startUpdate(url)
                         ackCommand(cmdId, true, "update started")
                     } catch (e: Exception) {
                         ackCommand(cmdId, false, "update failed: ${e.message}")
