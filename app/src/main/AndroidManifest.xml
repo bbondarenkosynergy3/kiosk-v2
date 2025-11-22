@@ -4,14 +4,11 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    
-    <!-- ВАЖНО: разрешение для Device Admin / Device Owner -->
+
     <uses-permission
         android:name="android.permission.BIND_DEVICE_ADMIN"
         tools:ignore="ProtectedPermissions" />
 
-    
-        <!-- android:name=".AppContextHolder" -->
     <application
         android:label="360 Synergy Kiosk (Pro)"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
@@ -24,15 +21,15 @@
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:launchMode="singleTop"
             android:hardwareAccelerated="true">
-            
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            
-        </activity>
-        
 
+        </activity>
+
+        <!-- Единственный FCM receiver -->
         <service
             android:name=".MyFirebaseService"
             android:exported="false">
@@ -41,15 +38,7 @@
             </intent-filter>
         </service>
 
-        <service
-            android:name=".FCMCommandReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
-            </intent-filter>
-        </service>
-
-        
+        <!-- Удалено: FCMCommandReceiver -->
 
         <receiver
             android:name=".MyDeviceAdminReceiver"
