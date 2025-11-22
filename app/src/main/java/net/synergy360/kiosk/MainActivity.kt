@@ -23,17 +23,13 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
-import android.view.View
 import android.os.PowerManager
 import android.app.PendingIntent
 
 class MainActivity : Activity() {
 
-
     private lateinit var webView: WebView
     private lateinit var root: FrameLayout
-    private var sleepOverlay: View? = null
-    private var sleepLabel: TextView? = null
     private var offlineBanner: TextView? = null
     private val db = FirebaseFirestore.getInstance()
 
@@ -56,7 +52,10 @@ class MainActivity : Activity() {
             webView.settings.javaScriptEnabled = true
             webView.settings.domStorageEnabled = true
             webView.webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean = false
 
                 override fun onReceivedError(
                     view: WebView,
@@ -120,30 +119,14 @@ class MainActivity : Activity() {
             id
         }
     }
-    // === HEARTBEAT (обновление статуса каждые 10 мин) ===
+
+    // === HEARTBEAT (обновление статуса каждые 30 сек — сейчас так задано) ===
     private val heartbeatHandler = Handler(Looper.getMainLooper())
-    private val heartbeatInterval = 1 * 30 * 1000L // 10 минут
+    private val heartbeatInterval = 1 * 30 * 1000L // 30 секунд (ты можешь поменять комментарий или значение)
     private val heartbeatRunnable = object : Runnable {
         override fun run() {
-            sendHeartbeat()                                // отправляем обновление
-            heartbeatHandler.postDelayed(this, heartbeatInterval) // планируем следующее
-        }
-    }
-    // Night sleep window: 21:00 - 09:00 (device local time)
-    private val sleepStartHour = 25
-    private val sleepEndHour = 26
-
-    // Manual wake duration after tap during sleep (ms)
-    private val manualWakeMs = 60_000L
-    private var manualWakeUntil: Long = 0L
-
-    // Periodic check for sleep state
-    private val checkIntervalMs = 15_000L
-    private val handler = Handler(Looper.getMainLooper())
-    private val tick = object : Runnable {
-        override fun run() {
-            applySleepStateIfNeeded()
-            handler.postDelayed(this, checkIntervalMs)
+            sendHeartbeat()
+            heartbeatHandler.postDelayed(this, heartbeatInterval)
         }
     }
 
@@ -167,7 +150,10 @@ class MainActivity : Activity() {
             // 🔹 Проверка — Firebase init log
             try {
                 FirebaseFirestore.getInstance().collection("startupLogs").add(
-                    mapOf("event" to "Firebase init reached", "time" to System.currentTimeMillis())
+                    mapOf(
+                        "event" to "Firebase init reached",
+                        "time" to System.currentTimeMillis()
+                    )
                 )
                 Log.d("FIREBASE", "✅ Firestore reached at init")
             } catch (e: Exception) {
@@ -178,7 +164,10 @@ class MainActivity : Activity() {
             Handler(Looper.getMainLooper()).postDelayed({
                 try {
                     FirebaseFirestore.getInstance().collection("startupLogs").add(
-                        mapOf("event" to "Delayed Firestore test log after 5s", "time" to System.currentTimeMillis())
+                        mapOf(
+                            "event" to "Delayed Firestore test log after 5s",
+                            "time" to System.currentTimeMillis()
+                        )
                     )
                     Log.d("FIREBASE", "✅ Delayed Firestore test log sent")
                 } catch (e: Exception) {
@@ -200,28 +189,31 @@ class MainActivity : Activity() {
         }
         logEvent("Lifecycle", "onCreate() started")
 
-
         try {
             val data = mapOf(
                 "event" to "onCreate_started",
                 "timestamp" to System.currentTimeMillis()
             )
             FirebaseFirestore.getInstance().collection("debugLogs").add(data)
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
 
         // === Временное сохранение компании в prefs ===
         if (!prefs.contains("company")) {
             prefs.edit().putString("company", "synergy3").apply()
             Log.d("SETUP", "✅ Default company saved to prefs: synergy3")
         } else {
-            Log.d("SETUP", "✅ Company already in prefs: ${prefs.getString("company", "unknown")}")
+            Log.d(
+                "SETUP",
+                "✅ Company already in prefs: ${prefs.getString("company", "unknown")}"
+            )
         }
 
         // Immersive fullscreen
         window.decorView.systemUiVisibility =
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-            View.SYSTEM_UI_FLAG_FULLSCREEN or
-            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
 
         // Keep screen on while app is running (prevents system timeout)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -231,40 +223,32 @@ class MainActivity : Activity() {
         initWebViewSafeWithRetry()
         Log.d("WEBVIEW", "🔧 Early WebView init called after setContentView")
 
-
-        // Touch layer: admin gesture + tap-to-wake
+        // Touch layer: admin gesture
         val touchLayer = object : View(this) {
             override fun onTouchEvent(e: MotionEvent?): Boolean {
                 if (e?.action == MotionEvent.ACTION_DOWN) {
                     handleCornerTap(e.x, e.y)
-                    if (isInSleepWindow() && isSleeping()) {
-                        // Wake on any touch (no reload)
-                        manualWakeUntil = SystemClock.uptimeMillis() + manualWakeMs
-                        removeSleepOverlay()
-                    }
                 }
                 return false
             }
         }
-        root.addView(touchLayer, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT
-        ))
-
-        // Start periodic checker
-        handler.post(tick)
-
+        root.addView(
+            touchLayer, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
 
         // === Получение FCM токена и регистрация устройства ===
         Handler(Looper.getMainLooper()).postDelayed({
             logEvent("Provisioning", "📡 Firestore connectivity check after 5s delay")
         }, 5000)
+
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
                 Log.d("FCM", "✅ Token fetched: $token")
 
-                // данные для Firestore при первой регистрации устройства
-                val company = prefs.getString("company", "synergy3") ?: " unknowncompany"
+                val company = prefs.getString("company", "synergy3") ?: "unknowncompany"
                 val data = mapOf(
                     "company" to company,
                     "token" to token,
@@ -274,20 +258,23 @@ class MainActivity : Activity() {
                     "timestamp" to System.currentTimeMillis(),
                     "status" to "online",
                     "command" to "idle",
-                    "commandId" to "init",                // 🆕 базовое значение
-                    "payload" to emptyMap<String, Any>()  // 🆕 пустой объект payload
+                    "commandId" to "init",
+                    "payload" to emptyMap<String, Any>()
                 )
 
-                db.collection("company").document(company).collection("devices").document(deviceId)
+                db.collection("company").document(company).collection("devices")
+                    .document(deviceId)
                     .set(data, SetOptions.merge())
                     .addOnSuccessListener {
                         Log.d("FIRESTORE", "✅ Device registered (id=$deviceId)")
 
-                        // Логируем успешную регистрацию перед загрузкой WebView
-                        logEvent("Provisioning", "Device registered successfully, loading WebView")
+                        logEvent(
+                            "Provisioning",
+                            "Device registered successfully, loading WebView"
+                        )
 
-                        // загружаем веб-страницу после регистрации (через безопасную инициализацию WebView)
-                        val fullUrl = "https://360synergy.net/kiosk3/public/feedback.html?company=$company&id=$deviceId"
+                        val fullUrl =
+                            "https://360synergy.net/kiosk3/public/feedback.html?company=$company&id=$deviceId"
                         Log.d("WEBVIEW", "🌐 Preparing WebView for URL: $fullUrl")
 
                         initWebViewSafeWithRetry()
@@ -297,30 +284,41 @@ class MainActivity : Activity() {
                                 Log.d("WEBVIEW", "🌐 Loading URL into WebView: $fullUrl")
                                 webView.loadUrl(fullUrl)
                             } else {
-                                Log.e("WEBVIEW", "WebView is not initialized yet, cannot load $fullUrl")
+                                Log.e(
+                                    "WEBVIEW",
+                                    "WebView is not initialized yet, cannot load $fullUrl"
+                                )
                             }
                         }
 
                         startCommandListener()
-                        // 🛰️ PROVISIONING SUCCESS BROADCAST (чтобы SetupWizard не зависал)
+                        // 🛰️ PROVISIONING SUCCESS BROADCAST
                         try {
-                            val intent = Intent("android.app.action.PROVISIONING_SUCCESSFUL")
-                            sendBroadcast(intent)
-                            Log.i("Provisioning", "✅ Sent PROVISIONING_SUCCESSFUL broadcast to system")
+                            val intent2 =
+                                Intent("android.app.action.PROVISIONING_SUCCESSFUL")
+                            sendBroadcast(intent2)
+                            Log.i(
+                                "Provisioning",
+                                "✅ Sent PROVISIONING_SUCCESSFUL broadcast to system"
+                            )
                             logEvent("Provisioning", "Sent PROVISIONING_SUCCESSFUL broadcast")
                         } catch (e: Exception) {
-                            Log.e("Provisioning", "⚠️ Failed to send provisioning success broadcast: ${e.message}")
+                            Log.e(
+                                "Provisioning",
+                                "⚠️ Failed to send provisioning success broadcast: ${e.message}"
+                            )
                         }
                     }
             }
             .addOnFailureListener { e ->
                 Log.e("FCM", "❌ Failed to fetch FCM token", e)
 
-                // Логируем неудачу получения FCM токена
-                logEvent("FCM", "Failed to fetch token, proceeding with fallback registration")
+                logEvent(
+                    "FCM",
+                    "Failed to fetch token, proceeding with fallback registration"
+                )
 
-                // Даже если токен не получен (например, нет сети)
-                val company = prefs.getString("company", "pierce") ?: " unknowncompany"
+                val company = prefs.getString("company", "pierce") ?: "unknowncompany"
                 val localId = deviceId
                 val fallbackData = mapOf(
                     "company" to company,
@@ -334,90 +332,33 @@ class MainActivity : Activity() {
                     "commandId" to "init",
                     "payload" to emptyMap<String, Any>()
                 )
-                db.collection("company").document(company).collection("devices").document(localId)
+                db.collection("company").document(company).collection("devices")
+                    .document(localId)
                     .set(fallbackData, SetOptions.merge())
                     .addOnSuccessListener {
-                        Log.d("FIRESTORE", "✅ Device registered without token (ID: $localId)")
+                        Log.d(
+                            "FIRESTORE",
+                            "✅ Device registered without token (ID: $localId)"
+                        )
                         logEvent("Provisioning", "Fallback device registration successful")
                         startCommandListener()
-                        // 🛰️ PROVISIONING SUCCESS BROADCAST (чтобы SetupWizard не зависал)
                         try {
-                            val intent = Intent("android.app.action.PROVISIONING_SUCCESSFUL")
-                            sendBroadcast(intent)
-                            Log.i("Provisioning", "✅ Sent PROVISIONING_SUCCESSFUL broadcast to system")
+                            val intent2 =
+                                Intent("android.app.action.PROVISIONING_SUCCESSFUL")
+                            sendBroadcast(intent2)
+                            Log.i(
+                                "Provisioning",
+                                "✅ Sent PROVISIONING_SUCCESSFUL broadcast to system"
+                            )
                             logEvent("Provisioning", "Sent PROVISIONING_SUCCESSFUL broadcast")
                         } catch (e: Exception) {
-                            Log.e("Provisioning", "⚠️ Failed to send provisioning success broadcast: ${e.message}")
+                            Log.e(
+                                "Provisioning",
+                                "⚠️ Failed to send provisioning success broadcast: ${e.message}"
+                            )
                         }
                     }
             }
-    
-    
-    }
-
-    // Sleep logic
-    private fun isInSleepWindow(): Boolean {
-        val cal = Calendar.getInstance()
-        val h = cal.get(Calendar.HOUR_OF_DAY)
-        return if (sleepStartHour < sleepEndHour) {
-            h in sleepStartHour until sleepEndHour
-        } else {
-            (h >= sleepStartHour) || (h < sleepEndHour)
-        }
-    }
-
-    private fun isSleeping(): Boolean = sleepOverlay != null
-
-    private fun applySleepStateIfNeeded() {
-        val now = SystemClock.uptimeMillis()
-        val manualAwake = now < manualWakeUntil
-
-        if (isInSleepWindow()) {
-            if (!manualAwake) {
-                showSleepOverlay()
-            } else {
-                removeSleepOverlay()
-            }
-        } else {
-            removeSleepOverlay()
-            manualWakeUntil = 0L
-        }
-    }
-
-    private fun showSleepOverlay() {
-        if (sleepOverlay == null) {
-            sleepOverlay = View(this).apply {
-                setBackgroundColor(Color.BLACK)
-                alpha = 1f
-            }
-            root.addView(sleepOverlay, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            ))
-            sleepLabel = TextView(this).apply {
-                text = "Device sleeping"
-                setTextColor(Color.GRAY)
-                textSize = 14f
-            }
-            val lp = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            )
-            lp.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            lp.bottomMargin = 48
-            root.addView(sleepLabel, lp)
-        }
-    }
-
-    private fun removeSleepOverlay() {
-        sleepOverlay?.let {
-            root.removeView(it)
-            sleepOverlay = null
-        }
-        sleepLabel?.let {
-            root.removeView(it)
-            sleepLabel = null
-        }
     }
 
     // Offline banner
@@ -441,7 +382,9 @@ class MainActivity : Activity() {
         offlineBanner?.visibility = View.VISIBLE
     }
 
-    private fun hideOffline() { offlineBanner?.visibility = View.GONE }
+    private fun hideOffline() {
+        offlineBanner?.visibility = View.GONE
+    }
 
     // Admin gesture (4 corners, any order within 5s)
     private fun handleCornerTap(x: Float, y: Float) {
@@ -477,15 +420,15 @@ class MainActivity : Activity() {
             .setTitle("Exit kiosk mode?")
             .setMessage("Close the app and leave fullscreen.")
             .setPositiveButton("Yes") { _, _ ->
-                try { stopLockTask() } catch (_: Exception) {}
+                try {
+                    stopLockTask()
+                } catch (_: Exception) {
+                }
                 finish()
             }
             .setNegativeButton("No", null)
             .show()
     }
-
-
-
 
     private fun updateStatus(status: String) {
         val now = System.currentTimeMillis()
@@ -495,22 +438,28 @@ class MainActivity : Activity() {
             "timestamp" to now
         )
 
-        val company = prefs.getString("company", "pierce") ?: " unknowncompany"
-        // Важно: deviceId уже инициализирован лениво выше, он НЕ пустой.
-        db.collection("company").document(company).collection("devices").document(deviceId)
-            .set(update, com.google.firebase.firestore.SetOptions.merge())
-            .addOnSuccessListener { Log.d("FIRESTORE", "status=$status (id=$deviceId)") }
-            .addOnFailureListener { e -> Log.e("FIRESTORE", "status update fail", e) }
+        val company = prefs.getString("company", "pierce") ?: "unknowncompany"
+        db.collection("company").document(company).collection("devices")
+            .document(deviceId)
+            .set(update, SetOptions.merge())
+            .addOnSuccessListener {
+                Log.d("FIRESTORE", "status=$status (id=$deviceId)")
+            }
+            .addOnFailureListener { e ->
+                Log.e("FIRESTORE", "status update fail", e)
+            }
     }
-    
+
     // CommandListener
     private var commandReg: ListenerRegistration? = null
+
     private fun deviceRef(): com.google.firebase.firestore.DocumentReference {
-        val company = prefs.getString("company", "pierce") ?: " unknowncompany"
-        return db.collection("company").document(company).collection("devices").document(deviceId)
+        val company = prefs.getString("company", "pierce") ?: "unknowncompany"
+        return db.collection("company").document(company)
+            .collection("devices").document(deviceId)
     }
+
     private fun startCommandListener() {
-        // слушаем изменения в документе устройства
         commandReg = deviceRef().addSnapshotListener { snap, e ->
             if (e != null) {
                 Log.e("COMMANDS", "Listener error", e)
@@ -518,15 +467,15 @@ class MainActivity : Activity() {
             }
             Log.d("COMMAND", "👂 Listening for command changes on $deviceId")
             if (snap == null || !snap.exists()) {
-                // ещё не создали документ — ничего страшного
                 return@addSnapshotListener
             }
 
             val cmd = snap.getString("command") ?: "idle"
-            val cmdId = snap.getString("commandId") // для идемпотентности
-            val payload = (snap.get("payload") as? Map<*, *>)?.filterKeys { it is String } as? Map<String, Any> ?: emptyMap()
+            val cmdId = snap.getString("commandId")
+            val payload =
+                (snap.get("payload") as? Map<*, *>)?.filterKeys { it is String } as? Map<String, Any>
+                    ?: emptyMap()
 
-            // уже обработанная команда? (идемпотентность)
             val lastHandled = prefs.getString("last_cmd_id", null)
             if (cmd == "idle" || cmdId == null || cmdId == lastHandled) {
                 return@addSnapshotListener
@@ -534,40 +483,44 @@ class MainActivity : Activity() {
 
             Log.d("COMMANDS", "New command: $cmd id=$cmdId payload=$payload")
 
-            // Выполняем
             when (cmd) {
                 "reload" -> {
-                    webView.post { webView.reload() }
-                    ackCommand(cmdId, true, "reloaded")
+                    if (this::webView.isInitialized) {
+                        webView.post { webView.reload() }
+                        ackCommand(cmdId, true, "reloaded")
+                    } else {
+                        ackCommand(cmdId, false, "webview not initialized")
+                    }
                 }
 
                 "open_url" -> {
                     val url = payload["url"] as? String
                     if (!url.isNullOrBlank()) {
-                        webView.post { webView.loadUrl(url) }
-                        ackCommand(cmdId, true, "opened:$url")
+                        if (this::webView.isInitialized) {
+                            webView.post { webView.loadUrl(url) }
+                            ackCommand(cmdId, true, "opened:$url")
+                        } else {
+                            ackCommand(cmdId, false, "webview not initialized")
+                        }
                     } else {
                         ackCommand(cmdId, false, "url missing")
                     }
                 }
 
                 "ping" -> {
-                    // просто подтверждаем что живы
                     ackCommand(cmdId, true, "pong")
                 }
+
                 "sleep" -> {
                     val dpm = getSystemService(DevicePolicyManager::class.java)
-                    val admin = ComponentName(this, MyDeviceAdminReceiver::class.java)
-                
                     try {
-                        // реальный системный сон
                         dpm.lockNow()
                         ackCommand(cmdId, true, "screen off")
                     } catch (e: Exception) {
                         ackCommand(cmdId, false, "lockNow failed: ${e.message}")
                     }
                 }
-                
+
                 "wake" -> {
                     try {
                         val pm = getSystemService(PowerManager::class.java)
@@ -583,8 +536,10 @@ class MainActivity : Activity() {
                         ackCommand(cmdId, false, "wake failed: ${e.message}")
                     }
                 }
+
                 "update_now" -> {
-                    val url = "https://github.com/bbondarenkosynergy3/kiosk-v2/releases/latest/download/synergy360-kiosk-release-v.apk"
+                    val url =
+                        "https://github.com/bbondarenkosynergy3/kiosk-v2/releases/latest/download/synergy360-kiosk-release-v.apk"
                     try {
                         UpdateHelper(this).startUpdate(url)
                         ackCommand(cmdId, true, "update started")
@@ -592,6 +547,7 @@ class MainActivity : Activity() {
                         ackCommand(cmdId, false, "update failed: ${e.message}")
                     }
                 }
+
                 else -> {
                     ackCommand(cmdId, false, "unknown command: $cmd")
                 }
@@ -627,9 +583,10 @@ class MainActivity : Activity() {
             "timestamp" to now
         )
 
-        val company = prefs.getString("company", "synergy3") ?: " unknowncompany"
-        db.collection("company").document(company).collection("devices").document(deviceId)
-            .set(updateData, com.google.firebase.firestore.SetOptions.merge())
+        val company = prefs.getString("company", "synergy3") ?: "unknowncompany"
+        db.collection("company").document(company).collection("devices")
+            .document(deviceId)
+            .set(updateData, SetOptions.merge())
             .addOnSuccessListener {
                 Log.d("HEARTBEAT", "❤️ Heartbeat sent (ID: $deviceId)")
             }
@@ -654,48 +611,41 @@ class MainActivity : Activity() {
         }
         window.decorView.systemUiVisibility =
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-            View.SYSTEM_UI_FLAG_FULLSCREEN or
-            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-        handler.post(tick)
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+
         if (this::webView.isInitialized) {
             webView.onResume()
         } else {
             Log.e("WEBVIEW", "onResume: webView not initialized")
         }
-        // ⚡️ стартуем heartbeat-таймер
+
         heartbeatHandler.post(heartbeatRunnable)
-        // и сразу отметим «я онлайн»
         updateStatus("online")
         enableKioskIfOwner()
     }
 
     override fun onPause() {
         super.onPause()
-        handler.removeCallbacks(tick)
+
         if (this::webView.isInitialized) {
             webView.onPause()
         } else {
             Log.e("WEBVIEW", "onPause: webView not initialized")
         }
 
-        // 🛑 останавливаем heartbeat-таймер
         heartbeatHandler.removeCallbacks(heartbeatRunnable)
-        // и пишем, что девайс оффлайн
         updateStatus("offline")
-        heartbeatHandler.removeCallbacks(heartbeatRunnable)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        
-        // 🧩 Останавливаем heartbeat
+
         heartbeatHandler.removeCallbacks(heartbeatRunnable)
 
-        // 🧩 Отписываемся от слушателя Firestore-команд (если запущен)
         commandReg?.remove()
         commandReg = null
 
-        // 🧩 Обновляем статус устройства
         updateStatus("offline")
     }
 
@@ -704,27 +654,34 @@ class MainActivity : Activity() {
         val admin = ComponentName(this, MyDeviceAdminReceiver::class.java)
 
         if (dpm.isDeviceOwnerApp(packageName)) {
-            // Разрешаем наш пакет для lockTask (без диалога App Pin)
-            try { dpm.setLockTaskPackages(admin, arrayOf(packageName)) } catch (_: Throwable) {}
-
-            // Отключаем шторку уведомлений (API 28+)
-            try { dpm.setStatusBarDisabled(admin, true) } catch (_: Throwable) {}
-
-            // Отключаем экран блокировки (чтобы wake был без пина)
-            try { dpm.setKeyguardDisabled(admin, true) } catch (_: Throwable) {}
-
-            // Запускаем киоск-режим (без UI-подтверждения, т.к. мы DO)
-            if (dpm.isLockTaskPermitted(packageName)) {
-                try { startLockTask() } catch (_: Throwable) {}
+            try {
+                dpm.setLockTaskPackages(admin, arrayOf(packageName))
+            } catch (_: Throwable) {
             }
 
-            // Полноэкранный иммерсив
+            try {
+                dpm.setStatusBarDisabled(admin, true)
+            } catch (_: Throwable) {
+            }
+
+            try {
+                dpm.setKeyguardDisabled(admin, true)
+            } catch (_: Throwable) {
+            }
+
+            if (dpm.isLockTaskPermitted(packageName)) {
+                try {
+                    startLockTask()
+                } catch (_: Throwable) {
+                }
+            }
+
             window.decorView.systemUiVisibility =
                 (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_FULLSCREEN
-                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
+                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
         }
     }
 
@@ -733,13 +690,10 @@ class MainActivity : Activity() {
         if (hasFocus) {
             window.decorView.systemUiVisibility =
                 (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_FULLSCREEN
-                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
+                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
         }
     }
-
-
-    
 }
