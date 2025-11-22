@@ -130,8 +130,8 @@ class MainActivity : Activity() {
         }
     }
     // Night sleep window: 21:00 - 09:00 (device local time)
-    private val sleepStartHour = 2
-    private val sleepEndHour = 7
+    private val sleepStartHour = 25
+    private val sleepEndHour = 26
 
     // Manual wake duration after tap during sleep (ms)
     private val manualWakeMs = 60_000L
@@ -557,27 +557,62 @@ class MainActivity : Activity() {
                 }
                 "sleep" -> {
                     val dpm = getSystemService(DevicePolicyManager::class.java)
+                    val admin = ComponentName(this, MyDeviceAdminReceiver::class.java)
+                
                     try {
-                        dpm.lockNow() // мгновенно гасим экран
-                        ackCommand(cmdId, true, "screen off") // ✅ исправлено
+                        // реальный системный сон
+                        dpm.lockNow()
+                        ackCommand(cmdId, true, "screen off")
                     } catch (e: Exception) {
-                        ackCommand(cmdId, false, "lockNow failed: ${e.message}") // ✅ исправлено
+                        ackCommand(cmdId, false, "lockNow failed: ${e.message}")
                     }
                 }
-
+                
                 "wake" -> {
+                    val dpm = getSystemService(DevicePolicyManager::class.java)
+                    val admin = ComponentName(this, MyDeviceAdminReceiver::class.java)
+                
                     try {
                         val pm = getSystemService(PowerManager::class.java)
-                        @Suppress("DEPRECATION")
-                        val wl = pm.newWakeLock(
-                            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                            "kiosk:wake"
-                        )
-                        wl.acquire(3000)
-                        wl.release()
-                        ackCommand(cmdId, true, "screen on") // ✅ исправлено
+                
+                        if (dpm.isDeviceOwnerApp(packageName)) {
+                            try {
+                                // На всякий случай отключаем keyguard, чтобы не было PIN
+                                dpm.setKeyguardDisabled(admin, true)
+                            } catch (_: Throwable) {}
+                
+                            // Android 14 позволяет DO-приложению использовать wakeUp()
+                            try {
+                                pm.wakeUp(
+                                    SystemClock.uptimeMillis(),
+                                    PowerManager.WAKE_REASON_GESTURE,
+                                    "kiosk:wake"
+                                )
+                                ackCommand(cmdId, true, "screen on (wakeUp)")
+                            } catch (e: Exception) {
+                                // fallback: старый wakelock
+                                @Suppress("DEPRECATION")
+                                val wl = pm.newWakeLock(
+                                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                                    "kiosk:wake_fallback"
+                                )
+                                wl.acquire(3000)
+                                wl.release()
+                                ackCommand(cmdId, true, "screen on (wakelock fallback)")
+                            }
+                        } else {
+                            // если вдруг не DO
+                            @Suppress("DEPRECATION")
+                            val wl = pm.newWakeLock(
+                                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                                "kiosk:wake_no_do"
+                            )
+                            wl.acquire(3000)
+                            wl.release()
+                            ackCommand(cmdId, true, "screen on (no DO)")
+                        }
                     } catch (e: Exception) {
-                        ackCommand(cmdId, false, "wake failed: ${e.message}") // ✅ исправлено
+                        ackCommand(cmdId, false, "wake failed: ${e.message}")
                     }
                 }
                 "update_now" -> {
