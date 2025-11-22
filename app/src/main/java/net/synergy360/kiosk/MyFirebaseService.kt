@@ -166,7 +166,7 @@ class MyFirebaseService : FirebaseMessagingService() {
     private fun ack(cmdId: String, ok: Boolean, msg: String) {
         val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
         val deviceId = prefs.getString("device_id", null)
-        val company = prefs.getString("company", "pierce") ?: "unknowncompany"
+        val company = prefs.getString("company", "unknowncompany")!!
 
         if (deviceId == null) {
             Log.e("FCM", "ACK failed: deviceId missing")
