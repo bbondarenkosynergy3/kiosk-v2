@@ -571,33 +571,14 @@ class MainActivity : Activity() {
                 "wake" -> {
                     try {
                         val pm = getSystemService(PowerManager::class.java)
-                
-                        // === API 33+ — современный wakeUp() ===
-                        if (Build.VERSION.SDK_INT >= 33) {
-                            try {
-                                pm.wakeUp(
-                                    SystemClock.uptimeMillis(),
-                                    PowerManager.WAKE_REASON_GESTURE,
-                                    "kiosk:wake"
-                                )
-                                ackCommand(cmdId, true, "screen on (wakeUp)")
-                                return@addSnapshotListener
-                            } catch (e: Exception) {
-                                Log.e("WAKE", "wakeUp() failed: ${e.message}")
-                            }
-                        }
-                
-                        // === Fallback для Android 30–32 (и если wakeUp failed) ===
                         @Suppress("DEPRECATION")
                         val wl = pm.newWakeLock(
                             PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                            "kiosk:wake_fallback"
+                            "kiosk:wake_command"
                         )
                         wl.acquire(3000)
                         wl.release()
-                
-                        ackCommand(cmdId, true, "screen on (wakelock fallback)")
-                
+                        ackCommand(cmdId, true, "screen on")
                     } catch (e: Exception) {
                         ackCommand(cmdId, false, "wake failed: ${e.message}")
                     }
