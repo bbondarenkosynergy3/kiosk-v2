@@ -11,16 +11,19 @@ import com.google.firebase.messaging.RemoteMessage
 class FCMCommandReceiver : FirebaseMessagingService() {
 
     override fun onMessageReceived(msg: RemoteMessage) {
-        val cmd = msg.data["command"] ?: return
-        val payload = msg.data
+        val cmd = msg.data["cmd"] ?: return
+        val cmdId = msg.data["cmdId"] ?: "unknown"
 
-        Log.d("FCM", "🔥 FCM command: $cmd payload=$payload")
+        Log.d("FCM", "🔥 FCM_PUSH: cmd=$cmd cmdId=$cmdId payload=${msg.data}")
 
         when (cmd) {
+
             "sleep" -> {
                 val dpm = getSystemService(DevicePolicyManager::class.java)
-                val admin = ComponentName(this, MyDeviceAdminReceiver::class.java)
-                try { dpm.lockNow() } catch (e: Exception) {
+                try {
+                    dpm.lockNow()
+                    Log.d("FCM", "Screen locked from FCM")
+                } catch (e: Exception) {
                     Log.e("FCM", "sleep failed: ${e.message}")
                 }
             }
@@ -34,25 +37,30 @@ class FCMCommandReceiver : FirebaseMessagingService() {
                 )
                 wl.acquire(3000)
                 wl.release()
+                Log.d("FCM", "Screen woken from FCM")
             }
 
             "reload" -> {
-                // Ставим флаг, чтобы MainActivity reload сделала при запуске
                 getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
                     .edit().putBoolean("pending_reload", true).apply()
+                Log.d("FCM", "Reload flag set")
             }
 
-            "update" -> {
-                val url = payload["url"]
-                if (url != null)
+            "update_now" -> {
+                val url = msg.data["url"]
+                if (url != null) {
                     UpdateHelper(this).startUpdate(url)
+                    Log.d("FCM", "Update triggered from FCM: $url")
+                } else {
+                    Log.e("FCM", "Update command received but no URL")
+                }
             }
         }
     }
 
     override fun onNewToken(token: String) {
         Log.d("FCM", "New FCM token: $token")
-        // Отправим в Firestore
-        DeviceRegistrar.updateToken(this, token)
+        // Здесь НИЧЕГО не нужно — MainActivity сам регистрирует устройство и токен.
+        // Просто логируем.
     }
 }
