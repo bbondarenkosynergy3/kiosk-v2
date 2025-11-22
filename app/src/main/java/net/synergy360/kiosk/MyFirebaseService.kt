@@ -32,48 +32,23 @@ class MyFirebaseService : FirebaseMessagingService() {
         }
     }
 
-    "wake" -> {
-        val dpm = getSystemService(android.app.admin.DevicePolicyManager::class.java)
-        val admin = android.content.ComponentName(this, MyDeviceAdminReceiver::class.java)
-
-        try {
-            if (dpm.isDeviceOwnerApp(packageName) && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR1) {
-                try { dpm.setKeyguardDisabled(admin, true) } catch (_: Throwable) {}
-
-                val pm = getSystemService(android.os.PowerManager::class.java)
+            "wake" -> {
                 try {
-                    pm.wakeUp(
-                        android.os.SystemClock.uptimeMillis(),
-                        android.os.PowerManager.WAKE_REASON_GESTURE,
-                        "kiosk:fcm_wake"
-                    )
-                    Log.d("FCM", "✅ wake via wakeUp()")
-                } catch (e: Exception) {
-                    // fallback
+                    val pm = getSystemService(android.os.PowerManager::class.java)
+            
                     @Suppress("DEPRECATION")
                     val wl = pm.newWakeLock(
                         android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                        "kiosk:fcm_wake_fallback"
+                        "kiosk:fcm_wake"
                     )
                     wl.acquire(3000)
                     wl.release()
-                    Log.d("FCM", "✅ wake via wakelock fallback")
+            
+                    Log.d("FCM", "✅ wake via wakelock")
+                } catch (e: Exception) {
+                    Log.e("FCM", "wake failed: ${e.message}")
                 }
-            } else {
-                val pm = getSystemService(android.os.PowerManager::class.java)
-                @Suppress("DEPRECATION")
-                val wl = pm.newWakeLock(
-                    android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                    "kiosk:fcm_wake_no_do"
-                )
-                wl.acquire(3000)
-                wl.release()
-                Log.d("FCM", "✅ wake via wakelock (no DO)")
             }
-        } catch (e: Exception) {
-            Log.e("FCM", "wake failed: ${e.message}")
-        }
-    }
 
             "reload" -> {
                 prefs.edit().putBoolean("pending_reload", true).apply()
