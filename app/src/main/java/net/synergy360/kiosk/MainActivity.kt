@@ -693,6 +693,10 @@ class MainActivity : Activity() {
         // и сразу отметим «я онлайн»
         updateStatus("online")
         enableKioskIfOwner()
+        if (prefs.getBoolean("pending_reload", false)) {
+            prefs.edit().putBoolean("pending_reload", false).apply()
+            webView.reload()
+        }
     }
 
     override fun onPause() {
