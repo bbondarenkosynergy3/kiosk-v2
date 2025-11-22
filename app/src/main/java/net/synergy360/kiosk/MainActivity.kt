@@ -615,47 +615,6 @@ class MainActivity : Activity() {
             }
     }
 
-    private fun startUpdate(url: String) {
-        Thread {
-            try {
-                val connection = java.net.URL(url).openConnection()
-                connection.connect()
-                val input = connection.getInputStream()
-
-                val file = java.io.File(cacheDir, "update.apk")
-                val output = java.io.FileOutputStream(file)
-
-                input.copyTo(output)
-                output.flush()
-                output.close()
-                input.close()
-
-                val packageInstaller = packageManager.packageInstaller
-                val params = android.content.pm.PackageInstaller.SessionParams(
-                    android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL
-                )
-                val sessionId = packageInstaller.createSession(params)
-                val session = packageInstaller.openSession(sessionId)
-
-                val out = session.openWrite("package", 0, -1)
-                java.io.FileInputStream(file).use { it.copyTo(out) }
-                session.fsync(out)
-                out.close()
-
-                val intent = Intent(this, javaClass)
-                intent.action = "com.android.packageinstaller.ACTION_INSTALL_COMMIT"
-                val pending = PendingIntent.getActivity(
-                    this, 0, intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-                )
-                session.commit(pending.intentSender)
-                session.close()
-            } catch (e: Exception) {
-                Log.e("UPDATE", "Update failed: ${e.message}")
-            }
-        }.start()
-    }
-
     private fun sendHeartbeat() {
         val now = System.currentTimeMillis()
         val updateData = mapOf(
@@ -678,6 +637,18 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (prefs.getBoolean("pending_reload", false)) {
+            Log.d("COMMANDS", "pending_reload applied onResume")
+            prefs.edit().putBoolean("pending_reload", false).apply()
+
+            if (this::webView.isInitialized) {
+                try {
+                    webView.reload()
+                } catch (e: Exception) {
+                    Log.e("WEBVIEW", "reload failed: ${e.message}")
+                }
+            }
+        }
         window.decorView.systemUiVisibility =
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
             View.SYSTEM_UI_FLAG_FULLSCREEN or
@@ -693,10 +664,6 @@ class MainActivity : Activity() {
         // и сразу отметим «я онлайн»
         updateStatus("online")
         enableKioskIfOwner()
-        if (prefs.getBoolean("pending_reload", false)) {
-            prefs.edit().putBoolean("pending_reload", false).apply()
-            webView.reload()
-        }
     }
 
     override fun onPause() {

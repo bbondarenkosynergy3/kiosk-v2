@@ -9,7 +9,57 @@ import com.google.firebase.messaging.RemoteMessage
 class MyFirebaseService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        Log.d("FCM", "📩 Message received: ${remoteMessage.data}")
+        val data = remoteMessage.data
+        if (data.isEmpty()) {
+            Log.d("FCM", "📩 Empty FCM message received")
+            return
+        }
+
+        val cmd = data["cmd"] ?: data["command"] ?: return
+        val cmdId = data["cmdId"]
+        Log.d("FCM", "🔥 FCM command received: $cmd id=$cmdId payload=$data")
+
+        val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
+
+        when (cmd) {
+            "sleep" -> {
+                val dpm = getSystemService(android.app.admin.DevicePolicyManager::class.java)
+                try { dpm.lockNow() } catch (e: Exception) {
+                    Log.e("FCM", "sleep failed: ${e.message}")
+                }
+            }
+
+            "wake" -> {
+                val pm = getSystemService(android.os.PowerManager::class.java)
+                @Suppress("DEPRECATION")
+                val wl = pm.newWakeLock(
+                    android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                    "kiosk:wake"
+                )
+                wl.acquire(3000)
+                wl.release()
+            }
+
+            "reload" -> {
+                prefs.edit().putBoolean("pending_reload", true).apply()
+            }
+
+            "update_now", "update" -> {
+                val url = data["url"]
+                if (!url.isNullOrEmpty()) {
+                    UpdateHelper(this).startUpdate(url)
+                } else {
+                    Log.e("FCM", "update command without URL")
+                }
+            }
+
+            "open_url" -> {
+                val url = data["url"]
+                if (!url.isNullOrEmpty()) {
+                    prefs.edit().putString("pending_open_url", url).apply()
+                }
+            }
+        }
     }
 
     override fun onNewToken(token: String) {
