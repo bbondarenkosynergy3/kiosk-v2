@@ -59,6 +59,14 @@ class BootReceiver : BroadcastReceiver() {
                 Log.d("BOOT", "Applying restored schedule: sleep=$sleep wake=$wake")
 
                 ScheduleManager.applySchedule(context, sleep, wake)
+
+                // Schedule daily midnight day switch
+                try {
+                    ScheduleManager.scheduleDaySwitch(context)
+                    Log.d("BOOT", "Day-switch alarm scheduled")
+                } catch (e: Exception) {
+                    Log.e("BOOT", "Failed to schedule day-switch: ${e.message}")
+                }
             }
             .addOnFailureListener {
                 Log.e("BOOT", "Failed to restore schedule: ${it.message}")
