@@ -67,25 +67,34 @@
             </intent-filter>
         </receiver>
 
-        <!-- SLEEP ALARM -->
         <receiver
             android:name=".SleepAlarmReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="kiosk.sleep"/>
-                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </receiver>
-
-        <!-- WAKE ALARM -->
+        
         <receiver
             android:name=".WakeAlarmReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="kiosk.wake"/>
-                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </receiver>
+        
+        <receiver
+            android:name=".SleepWakeReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="kiosk.sleep"/>
+                <action android:name="kiosk.wake"/>
+                <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </receiver>
 
@@ -96,18 +105,6 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="kiosk.day_switch"/>
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </receiver>
-
-        <!-- CENTRAL SLEEP/WAKE RECEIVER -->
-        <receiver
-            android:name=".SleepWakeReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="kiosk.sleep"/>
-                <action android:name="kiosk.wake"/>
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </receiver>
