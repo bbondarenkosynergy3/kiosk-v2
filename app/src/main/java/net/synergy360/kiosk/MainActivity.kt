@@ -1,11 +1,13 @@
 package net.synergy360.kiosk
 
 import android.app.Activity
-import android.content.Intent
-import android.util.Log
 import android.app.AlertDialog
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Intent
 import android.graphics.Color
 import android.os.*
+import android.util.Log
 import android.view.*
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -13,16 +15,14 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.TextView
-import java.util.*
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.FirebaseApp
-import android.os.Build
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
-import android.app.admin.DevicePolicyManager
-import android.content.ComponentName
+import com.google.firebase.messaging.FirebaseMessaging
+import java.util.UUID
 import android.os.PowerManager
+import android.os.Build
 
 class MainActivity : Activity() {
 
@@ -31,8 +31,63 @@ class MainActivity : Activity() {
     private var offlineBanner: TextView? = null
     private val db = FirebaseFirestore.getInstance()
 
-    // === Safe WebView init with retries for DO/Knox ===
+    // Safe WebView init with retries
     private var webViewInitialized = false
+
+    // Shared prefs
+    private val prefs by lazy { getSharedPreferences("kiosk_prefs", MODE_PRIVATE) }
+
+    // Stable device ID
+    private val deviceId: String by lazy {
+        prefs.getString("device_id", null) ?: run {
+            val id = "${Build.MODEL}_${UUID.randomUUID().toString().take(8)}"
+            prefs.edit().putString("device_id", id).apply()
+            id
+        }
+    }
+
+    // Heartbeat
+    private val heartbeatHandler = Handler(Looper.getMainLooper())
+    private val heartbeatInterval = 30_000L
+    private val heartbeatRunnable = object : Runnable {
+        override fun run() {
+            sendHeartbeat()
+            heartbeatHandler.postDelayed(this, heartbeatInterval)
+        }
+    }
+
+    // Admin gesture (4 corners in 5s)
+    private val gestureWindowMs = 5_000L
+    private val tappedCorners = mutableSetOf<Int>()
+    private var gestureStartTs: Long = 0L
+
+    companion object {
+        private const val CORNER_TL = 1
+        private const val CORNER_TR = 2
+        private const val CORNER_BL = 3
+        private const val CORNER_BR = 4
+    }
+
+    // --- Helpers ---
+
+    private fun getCompany(): String {
+        return prefs.getString("company", "synergy3") ?: "synergy3"
+    }
+
+    private fun logEvent(tag: String, message: String) {
+        try {
+            val data = mapOf(
+                "tag" to tag,
+                "message" to message,
+                "timestamp" to System.currentTimeMillis(),
+                "deviceId" to deviceId,
+                "company" to getCompany()
+            )
+            FirebaseFirestore.getInstance().collection("startupLogs").add(data)
+        } catch (e: Exception) {
+            Log.e("LOGGING", "Failed to log to Firestore: ${e.message}")
+        }
+    }
 
     private fun initWebViewSafeWithRetry(retryCount: Int = 0) {
         if (webViewInitialized) return
@@ -50,6 +105,7 @@ class MainActivity : Activity() {
             webView.settings.javaScriptEnabled = true
             webView.settings.domStorageEnabled = true
             webView.webViewClient = object : WebViewClient() {
+
                 override fun shouldOverrideUrlLoading(
                     view: WebView?,
                     request: WebResourceRequest?
@@ -90,132 +146,44 @@ class MainActivity : Activity() {
         }
     }
 
-    // Универсальная функция логирования событий в Firestore
-    private fun logEvent(tag: String, message: String) {
-        try {
-            val data = mapOf(
-                "tag" to tag,
-                "message" to message,
-                "timestamp" to System.currentTimeMillis(),
-                "deviceId" to deviceId,
-                "company" to prefs.getString("company", "unknown")
-            )
-            FirebaseFirestore.getInstance().collection("startupLogs").add(data)
-        } catch (e: Exception) {
-            Log.e("LOGGING", "Failed to log to Firestore: ${e.message}")
-        }
-    }
-
-    // Shared prefs и стабильный ID устройства (создаётся один раз и хранится в prefs)
-    private val prefs by lazy { getSharedPreferences("kiosk_prefs", MODE_PRIVATE) }
-
-    private val deviceId: String by lazy {
-        prefs.getString("device_id", null) ?: run {
-            val id = "${Build.MODEL}_${UUID.randomUUID().toString().take(8)}"
-            prefs.edit().putString("device_id", id).apply()
-            id
-        }
-    }
-
-    // === HEARTBEAT (обновление статуса каждые 30 сек) ===
-    private val heartbeatHandler = Handler(Looper.getMainLooper())
-    private val heartbeatInterval = 30_000L // 30 секунд
-    private val heartbeatRunnable = object : Runnable {
-        override fun run() {
-            sendHeartbeat()
-            heartbeatHandler.postDelayed(this, heartbeatInterval)
-        }
-    }
-
-    // Admin gesture: tap 4 corners within 5s in any order
-    private val gestureWindowMs = 5_000L
-    private val tappedCorners = mutableSetOf<Int>()
-    private var gestureStartTs: Long = 0L
-
-    companion object {
-        private const val CORNER_TL = 1
-        private const val CORNER_TR = 2
-        private const val CORNER_BL = 3
-        private const val CORNER_BR = 4
-    }
+    // --- Lifecycle ---
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Firebase init
         try {
-            // Firebase init
             FirebaseApp.initializeApp(this)
-            try {
-                FirebaseFirestore.getInstance().collection("startupLogs").add(
-                    mapOf(
-                        "event" to "Firebase init reached",
-                        "time" to System.currentTimeMillis()
-                    )
-                )
-                Log.d("FIREBASE", "✅ Firestore reached at init")
-            } catch (e: Exception) {
-                Log.e("FIREBASE", "❌ Failed to send Firestore init log: ${e.message}")
-            }
-
-            Handler(Looper.getMainLooper()).postDelayed({
-                try {
-                    FirebaseFirestore.getInstance().collection("startupLogs").add(
-                        mapOf(
-                            "event" to "Delayed Firestore test log after 5s",
-                            "time" to System.currentTimeMillis()
-                        )
-                    )
-                    Log.d("FIREBASE", "✅ Delayed Firestore test log sent")
-                } catch (e: Exception) {
-                    Log.e("FIREBASE", "❌ Failed delayed Firestore log: ${e.message}")
-                }
-            }, 5000)
-            Log.d("FIREBASE", "✅ Firebase initialized successfully")
-
-            // Ранний PROVISIONING_SUCCESSFUL
-            val intent = Intent("android.app.action.PROVISIONING_SUCCESSFUL")
-            intent.setPackage("com.android.managedprovisioning")
-            sendBroadcast(intent)
-            Log.i("Provisioning", "✅ Early PROVISIONING_SUCCESSFUL broadcast sent to system")
-            logEvent("Provisioning", "Early PROVISIONING_SUCCESSFUL broadcast sent")
+            logEvent("Lifecycle", "Firebase initialized")
         } catch (e: Exception) {
-            Log.e("Provisioning", "⚠️ Early provisioning setup failed: ${e.message}")
+            Log.e("FIREBASE", "Firebase init failed: ${e.message}")
         }
+
         logEvent("Lifecycle", "onCreate() started")
 
-        try {
-            val data = mapOf(
-                "event" to "onCreate_started",
-                "timestamp" to System.currentTimeMillis()
-            )
-            FirebaseFirestore.getInstance().collection("debugLogs").add(data)
-        } catch (_: Exception) { }
-
-        // company в prefs
+        // company default
         if (!prefs.contains("company")) {
             prefs.edit().putString("company", "synergy3").apply()
-            Log.d("SETUP", "✅ Default company saved to prefs: synergy3")
+            Log.d("SETUP", "Default company saved to prefs: synergy3")
         } else {
-            Log.d(
-                "SETUP",
-                "✅ Company already in prefs: ${prefs.getString("company", "unknown")}"
-            )
+            Log.d("SETUP", "Company in prefs: ${getCompany()}")
         }
 
-        // Immersive fullscreen
+        // immersive fullscreen
         window.decorView.systemUiVisibility =
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
                 View.SYSTEM_UI_FLAG_FULLSCREEN or
                 View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
 
-        // Не даём экрану гаснуть, пока приложение активно
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         root = FrameLayout(this)
         setContentView(root)
-        initWebViewSafeWithRetry()
-        Log.d("WEBVIEW", "🔧 Early WebView init called after setContentView")
 
-        // Touch layer: только админ-жест
+        initWebViewSafeWithRetry()
+        Log.d("WEBVIEW", "Early WebView init called after setContentView")
+
+        // Touch layer for admin gesture only
         val touchLayer = object : View(this) {
             override fun onTouchEvent(e: MotionEvent?): Boolean {
                 if (e?.action == MotionEvent.ACTION_DOWN) {
@@ -232,16 +200,12 @@ class MainActivity : Activity() {
             )
         )
 
-        // FCM токен + регистрация
-        Handler(Looper.getMainLooper()).postDelayed({
-            logEvent("Provisioning", "📡 Firestore connectivity check after 5s delay")
-        }, 5000)
-
+        // FCM token + registration
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
-                Log.d("FCM", "✅ Token fetched: $token")
+                Log.d("FCM", "Token fetched: $token")
 
-                val company = prefs.getString("company", "synergy3") ?: "unknowncompany"
+                val company = getCompany()
                 val data = mapOf(
                     "company" to company,
                     "token" to token,
@@ -259,58 +223,42 @@ class MainActivity : Activity() {
                     .document(deviceId)
                     .set(data, SetOptions.merge())
                     .addOnSuccessListener {
-                        Log.d("FIRESTORE", "✅ Device registered (id=$deviceId)")
-
-                        logEvent(
-                            "Provisioning",
-                            "Device registered successfully, loading WebView"
-                        )
+                        Log.d("FIRESTORE", "Device registered (id=$deviceId)")
+                        logEvent("Provisioning", "Device registered, loading WebView")
 
                         val fullUrl =
                             "https://360synergy.net/kiosk3/public/feedback.html?company=$company&id=$deviceId"
-                        Log.d("WEBVIEW", "🌐 Preparing WebView for URL: $fullUrl")
+                        Log.d("WEBVIEW", "Loading URL: $fullUrl")
 
                         initWebViewSafeWithRetry()
 
                         Handler(Looper.getMainLooper()).post {
                             if (this::webView.isInitialized) {
-                                Log.d("WEBVIEW", "🌐 Loading URL into WebView: $fullUrl")
                                 webView.loadUrl(fullUrl)
                             } else {
-                                Log.e(
-                                    "WEBVIEW",
-                                    "WebView is not initialized yet, cannot load $fullUrl"
-                                )
+                                Log.e("WEBVIEW", "WebView not initialized, cannot load $fullUrl")
                             }
                         }
 
                         startCommandListener()
+
+                        // Один раз шлём PROVISIONING_SUCCESSFUL
                         try {
-                            val intent2 =
-                                Intent("android.app.action.PROVISIONING_SUCCESSFUL")
-                            sendBroadcast(intent2)
-                            Log.i(
-                                "Provisioning",
-                                "✅ Sent PROVISIONING_SUCCESSFUL broadcast to system"
-                            )
-                            logEvent("Provisioning", "Sent PROVISIONING_SUCCESSFUL broadcast")
+                            val intent = Intent("android.app.action.PROVISIONING_SUCCESSFUL")
+                            intent.setPackage("com.android.managedprovisioning")
+                            sendBroadcast(intent)
+                            Log.i("Provisioning", "Sent PROVISIONING_SUCCESSFUL broadcast")
+                            logEvent("Provisioning", "PROVISIONING_SUCCESSFUL broadcast sent")
                         } catch (e: Exception) {
-                            Log.e(
-                                "Provisioning",
-                                "⚠️ Failed to send provisioning success broadcast: ${e.message}"
-                            )
+                            Log.e("Provisioning", "Failed provisioning broadcast: ${e.message}")
                         }
                     }
             }
             .addOnFailureListener { e ->
-                Log.e("FCM", "❌ Failed to fetch FCM token", e)
+                Log.e("FCM", "Failed to fetch FCM token", e)
+                logEvent("FCM", "Failed to fetch token, registering without FCM")
 
-                logEvent(
-                    "FCM",
-                    "Failed to fetch token, proceeding with fallback registration"
-                )
-
-                val company = prefs.getString("company", "pierce") ?: "unknowncompany"
+                val company = getCompany()
                 val localId = deviceId
                 val fallbackData = mapOf(
                     "company" to company,
@@ -324,36 +272,29 @@ class MainActivity : Activity() {
                     "commandId" to "init",
                     "payload" to emptyMap<String, Any>()
                 )
+
                 db.collection("company").document(company).collection("devices")
                     .document(localId)
                     .set(fallbackData, SetOptions.merge())
                     .addOnSuccessListener {
-                        Log.d(
-                            "FIRESTORE",
-                            "✅ Device registered without token (ID: $localId)"
-                        )
+                        Log.d("FIRESTORE", "Device registered WITHOUT token (ID: $localId)")
                         logEvent("Provisioning", "Fallback device registration successful")
                         startCommandListener()
+
                         try {
-                            val intent2 =
-                                Intent("android.app.action.PROVISIONING_SUCCESSFUL")
-                            sendBroadcast(intent2)
-                            Log.i(
-                                "Provisioning",
-                                "✅ Sent PROVISIONING_SUCCESSFUL broadcast to system"
-                            )
-                            logEvent("Provisioning", "Sent PROVISIONING_SUCCESSFUL broadcast")
+                            val intent = Intent("android.app.action.PROVISIONING_SUCCESSFUL")
+                            intent.setPackage("com.android.managedprovisioning")
+                            sendBroadcast(intent)
+                            Log.i("Provisioning", "Sent PROVISIONING_SUCCESSFUL broadcast")
+                            logEvent("Provisioning", "PROVISIONING_SUCCESSFUL broadcast sent")
                         } catch (e: Exception) {
-                            Log.e(
-                                "Provisioning",
-                                "⚠️ Failed to send provisioning success broadcast: ${e.message}"
-                            )
+                            Log.e("Provisioning", "Failed provisioning broadcast: ${e.message}")
                         }
                     }
             }
     }
 
-    // --- Wake helper: имитация нажатия Power для пробуждения ---
+    // Wake helper
     private fun wakeDeviceLikePowerButton() {
         try {
             val pm = getSystemService(PowerManager::class.java)
@@ -364,7 +305,7 @@ class MainActivity : Activity() {
             )
             wl.acquire(3000)
             wl.release()
-            Log.d("WAKE", "✅ wakeDeviceLikePowerButton executed")
+            Log.d("WAKE", "wakeDeviceLikePowerButton executed")
         } catch (e: Exception) {
             Log.e("WAKE", "wakeDeviceLikePowerButton failed: ${e.message}")
         }
@@ -395,7 +336,7 @@ class MainActivity : Activity() {
         offlineBanner?.visibility = View.GONE
     }
 
-    // Admin gesture (4 corners, any order within 5s)
+    // Admin gesture
     private fun handleCornerTap(x: Float, y: Float) {
         val w = resources.displayMetrics.widthPixels
         val h = resources.displayMetrics.heightPixels
@@ -444,7 +385,7 @@ class MainActivity : Activity() {
             "timestamp" to now
         )
 
-        val company = prefs.getString("company", "pierce") ?: "unknowncompany"
+        val company = getCompany()
         db.collection("company").document(company).collection("devices")
             .document(deviceId)
             .set(update, SetOptions.merge())
@@ -456,14 +397,13 @@ class MainActivity : Activity() {
             }
     }
 
-    // CommandListener
+    // --- Commands ---
+
     private var commandReg: ListenerRegistration? = null
 
-    private fun deviceRef(): com.google.firebase.firestore.DocumentReference {
-        val company = prefs.getString("company", "pierce") ?: "unknowncompany"
-        return db.collection("company").document(company)
+    private fun deviceRef() =
+        db.collection("company").document(getCompany())
             .collection("devices").document(deviceId)
-    }
 
     private fun startCommandListener() {
         commandReg = deviceRef().addSnapshotListener { snap, e ->
@@ -471,10 +411,8 @@ class MainActivity : Activity() {
                 Log.e("COMMANDS", "Listener error", e)
                 return@addSnapshotListener
             }
-            Log.d("COMMAND", "👂 Listening for command changes on $deviceId")
-            if (snap == null || !snap.exists()) {
-                return@addSnapshotListener
-            }
+            Log.d("COMMANDS", "Listening for command changes on $deviceId")
+            if (snap == null || !snap.exists()) return@addSnapshotListener
 
             val cmd = snap.getString("command") ?: "idle"
             val cmdId = snap.getString("commandId")
@@ -578,20 +516,21 @@ class MainActivity : Activity() {
             "timestamp" to now
         )
 
-        val company = prefs.getString("company", "synergy3") ?: "unknowncompany"
+        val company = getCompany()
         db.collection("company").document(company).collection("devices")
             .document(deviceId)
             .set(updateData, SetOptions.merge())
             .addOnSuccessListener {
-                Log.d("HEARTBEAT", "❤️ Heartbeat sent (ID: $deviceId)")
+                Log.d("HEARTBEAT", "Heartbeat sent (ID: $deviceId)")
             }
             .addOnFailureListener { e ->
-                Log.e("HEARTBEAT", "💔 Failed to send heartbeat", e)
+                Log.e("HEARTBEAT", "Failed to send heartbeat", e)
             }
     }
 
     override fun onResume() {
         super.onResume()
+
         if (prefs.getBoolean("pending_reload", false)) {
             Log.d("COMMANDS", "pending_reload applied onResume")
             prefs.edit().putBoolean("pending_reload", false).apply()
@@ -604,6 +543,7 @@ class MainActivity : Activity() {
                 }
             }
         }
+
         window.decorView.systemUiVisibility =
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
                 View.SYSTEM_UI_FLAG_FULLSCREEN or
