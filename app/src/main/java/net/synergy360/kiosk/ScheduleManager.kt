@@ -9,33 +9,33 @@ import java.util.*
 
 object ScheduleManager {
 
-    /** Основная функция — ставит 2 будильника sleep/wake */
+    /** Ставим будильники sleep/wake И будильник смены дня */
     fun applySchedule(context: Context, sleep: String, wake: String) {
         Log.d("SCHEDULE", "Applying schedule sleep=$sleep wake=$wake")
 
         cancelAll(context)
+
         setAlarm(context, sleep, "sleep")
         setAlarm(context, wake, "wake")
+
+        scheduleDaySwitch(context)
     }
 
-    /** ❗ Новый: будильник на полночь для смены дня */
+    /** Будильник на 00:00 — вызывает DaySwitchReceiver */
     fun scheduleDaySwitch(context: Context) {
 
         val cal = Calendar.getInstance().apply {
             timeInMillis = System.currentTimeMillis()
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 5)   // чуть-чуть после полуночи
+            set(Calendar.SECOND, 5)
             if (before(Calendar.getInstance())) {
                 add(Calendar.DAY_OF_MONTH, 1)
             }
         }
 
-        val intent = Intent(context, MyFirebaseService::class.java).apply {
-            action = "kiosk.day_switch"
-        }
-
-        val pi = PendingIntent.getService(
+        val intent = Intent("kiosk.day_switch")
+        val pi = PendingIntent.getBroadcast(
             context,
             "day_switch".hashCode(),
             intent,
@@ -49,10 +49,10 @@ object ScheduleManager {
             pi
         )
 
-        Log.d("SCHEDULE", "Day-switch alarm set for ${cal.time}")
+        Log.d("SCHEDULE", "Day-switch alarm scheduled for ${cal.time}")
     }
 
-    /** Сбрасываем старые sleep/wake будильники */
+    /** Очищаем корректные PendingIntent'ы */
     private fun cancelAll(context: Context) {
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
@@ -68,7 +68,7 @@ object ScheduleManager {
         }
     }
 
-    /** Ставим будильник sleep/wake */
+    /** Ставим будильники sleep/wake */
     private fun setAlarm(context: Context, time: String, type: String) {
         val (hour, min) = time.split(":").map { it.toInt() }
 
