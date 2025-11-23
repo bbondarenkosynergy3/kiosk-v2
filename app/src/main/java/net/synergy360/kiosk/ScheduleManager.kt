@@ -5,9 +5,92 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import java.util.*
+import org.json.JSONObject
+import java.util.Calendar
 
 object ScheduleManager {
+
+    private const val PREFS_NAME = "kiosk_prefs"
+    private const val KEY_FULL_SCHEDULE = "full_schedule_json"
+
+    /** Сохраняем полное расписание (JSON со всеми днями) в prefs */
+    fun saveFullSchedule(context: Context, json: String) {
+        try {
+            // Легкая валидация
+            JSONObject(json) // бросит исключение, если мусор
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putString(KEY_FULL_SCHEDULE, json).apply()
+            Log.d("SCHEDULE", "Full schedule saved to prefs")
+        } catch (e: Exception) {
+            Log.e("SCHEDULE", "Failed to save schedule JSON: ${e.message}")
+        }
+    }
+
+    /** Применяем расписание на СЕГОДНЯ, читая его из prefs */
+    fun applyTodayFromPrefs(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_FULL_SCHEDULE, null)
+
+        if (json.isNullOrEmpty()) {
+            Log.w("SCHEDULE", "No full_schedule_json in prefs → nothing to apply")
+            return
+        }
+
+        val todayKey = getTodayKey()
+        Log.d("SCHEDULE", "applyTodayFromPrefs() for day=$todayKey")
+
+        try {
+            val root = JSONObject(json)
+
+            if (!root.has(todayKey)) {
+                Log.w("SCHEDULE", "No config for day=$todayKey in schedule JSON")
+                cancelAll(context)
+                scheduleDaySwitch(context)
+                return
+            }
+
+            val dayObj = root.getJSONObject(todayKey)
+
+            val enabled = dayObj.optBoolean("enabled", false)
+            if (!enabled) {
+                Log.d("SCHEDULE", "Day $todayKey disabled → cancel alarms, only day-switch")
+                cancelAll(context)
+                scheduleDaySwitch(context)
+                return
+            }
+
+            val sleep = dayObj.optString("sleep", null)
+            val wake = dayObj.optString("wake", null)
+
+            if (sleep.isNullOrEmpty() || wake.isNullOrEmpty()) {
+                Log.w("SCHEDULE", "Day $todayKey config missing sleep/wake → skipping")
+                cancelAll(context)
+                scheduleDaySwitch(context)
+                return
+            }
+
+            Log.d("SCHEDULE", "Today=$todayKey → sleep=$sleep wake=$wake")
+            applySchedule(context, sleep, wake)
+
+        } catch (e: Exception) {
+            Log.e("SCHEDULE", "applyTodayFromPrefs error: ${e.message}")
+        }
+    }
+
+    /** Ключ дня недели в виде "monday", "tuesday", ... */
+    private fun getTodayKey(): String {
+        val cal = Calendar.getInstance()
+        return when (cal.get(Calendar.DAY_OF_WEEK)) {
+            Calendar.MONDAY -> "monday"
+            Calendar.TUESDAY -> "tuesday"
+            Calendar.WEDNESDAY -> "wednesday"
+            Calendar.THURSDAY -> "thursday"
+            Calendar.FRIDAY -> "friday"
+            Calendar.SATURDAY -> "saturday"
+            Calendar.SUNDAY -> "sunday"
+            else -> "monday"
+        }
+    }
 
     /** Ставим будильники sleep/wake И будильник смены дня */
     fun applySchedule(context: Context, sleep: String, wake: String) {
@@ -23,7 +106,6 @@ object ScheduleManager {
 
     /** Будильник на 00:00 — вызывает DaySwitchReceiver */
     fun scheduleDaySwitch(context: Context) {
-
         val cal = Calendar.getInstance().apply {
             timeInMillis = System.currentTimeMillis()
             set(Calendar.HOUR_OF_DAY, 0)
@@ -52,12 +134,13 @@ object ScheduleManager {
         Log.d("SCHEDULE", "Day-switch alarm scheduled for ${cal.time}")
     }
 
-    /** Очищаем корректные PendingIntent'ы */
+    /** Очищаем все PendingIntent'ы для sleep/wake/day_switch */
     private fun cancelAll(context: Context) {
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
         listOf("sleep", "wake", "day_switch").forEach { type ->
-            val intent = Intent("kiosk.$type")
+            val action = if (type == "day_switch") "kiosk.day_switch" else "kiosk.$type"
+            val intent = Intent(action)
             val pi = PendingIntent.getBroadcast(
                 context,
                 type.hashCode(),
@@ -66,6 +149,8 @@ object ScheduleManager {
             )
             am.cancel(pi)
         }
+
+        Log.d("SCHEDULE", "All alarms canceled")
     }
 
     /** Ставим будильники sleep/wake */
