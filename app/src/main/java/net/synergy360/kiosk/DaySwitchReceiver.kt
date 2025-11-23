@@ -12,43 +12,64 @@ class DaySwitchReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Log.d("DAY_SWITCH", "🔄 Day changed → loading schedule for today")
 
-        try {
-            val prefs = context.getSharedPreferences("kiosk_prefs", Context.MODE_PRIVATE)
-            val company = prefs.getString("company", null) ?: return
+        val prefs = context.getSharedPreferences("kiosk_prefs", Context.MODE_PRIVATE)
+        val company = prefs.getString("company", null) ?: return
 
-            val today = java.time.LocalDate.now()
-                .dayOfWeek
-                .name
-                .lowercase(Locale.US)   // monday, tuesday …
+        val today = java.time.LocalDate.now()
+            .dayOfWeek
+            .name
+            .lowercase(Locale.US)
 
-            val configRef = FirebaseFirestore.getInstance()
-                .collection("company")
-                .document(company)
-                .collection("settings")
-                .document("config")
+        FirebaseFirestore.getInstance()
+            .collection("company")
+            .document(company)
+            .collection("settings")
+            .document("config")
+            .get()
+            .addOnSuccessListener { snap ->
 
-            configRef.get().addOnSuccessListener { snap ->
-
-                val kiosk = snap.get("kiosk") as? Map<*, *> ?: return@addOnSuccessListener
-                val schedule = kiosk["sleepWakeSchedule"] as? Map<*, *> ?: return@addOnSuccessListener
-                val dayCfg = schedule[today] as? Map<*, *> ?: return@addOnSuccessListener
-
-                val enabled = dayCfg["enabled"] as? Boolean ?: false
-                if (!enabled) {
-                    Log.d("DAY_SWITCH", "Today ($today) disabled → skipping")
+                val root = snap.data ?: run {
+                    Log.e("DAY_SWITCH", "❌ Config missing in Firestore")
                     return@addOnSuccessListener
                 }
 
-                val sleep = dayCfg["sleep"] as? String ?: return@addOnSuccessListener
-                val wake = dayCfg["wake"] as? String ?: return@addOnSuccessListener
+                val kiosk = root["kiosk"] as? Map<*, *> ?: run {
+                    Log.e("DAY_SWITCH", "❌ kiosk section missing")
+                    return@addOnSuccessListener
+                }
+
+                val schedule = kiosk["sleepWakeSchedule"] as? Map<*, *> ?: run {
+                    Log.e("DAY_SWITCH", "❌ sleepWakeSchedule missing")
+                    return@addOnSuccessListener
+                }
+
+                val dayCfg = schedule[today] as? Map<*, *> ?: run {
+                    Log.e("DAY_SWITCH", "❌ No config for day=$today")
+                    return@addOnSuccessListener
+                }
+
+                val enabled = dayCfg["enabled"] as? Boolean ?: false
+                if (!enabled) {
+                    Log.d("DAY_SWITCH", "⏳ Today ($today) disabled → skipping")
+                    return@addOnSuccessListener
+                }
+
+                val sleep = dayCfg["sleep"] as? String ?: run {
+                    Log.e("DAY_SWITCH", "❌ sleep missing")
+                    return@addOnSuccessListener
+                }
+
+                val wake = dayCfg["wake"] as? String ?: run {
+                    Log.e("DAY_SWITCH", "❌ wake missing")
+                    return@addOnSuccessListener
+                }
 
                 Log.d("DAY_SWITCH", "Today's schedule → sleep=$sleep wake=$wake")
 
                 ScheduleManager.applySchedule(context, sleep, wake)
             }
-
-        } catch (e: Exception) {
-            Log.e("DAY_SWITCH", "Error: ${e.message}")
-        }
+            .addOnFailureListener {
+                Log.e("DAY_SWITCH", "❌ Firestore error: ${it.message}")
+            }
     }
 }
