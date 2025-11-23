@@ -13,14 +13,6 @@ import android.content.Intent
 
 class MyFirebaseService : FirebaseMessagingService() {
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == "kiosk.day_switch") {
-            Log.d("SCHEDULE", "Day-switch triggered → refreshing schedule")
-            startScheduleListener()
-        }
-        return super.onStartCommand(intent, flags, startId)
-    }
-
     /* --------------------------------------------------
        🔵 AUTO-SCHEDULE LISTENER (Firestore → AlarmManager)
        -------------------------------------------------- */
