@@ -74,6 +74,14 @@
         </receiver>
 
         <receiver
+            android:name=".DaySwitchReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="kiosk.day_switch"/>
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".WakeAlarmReceiver"
             android:exported="true">
             <intent-filter>
