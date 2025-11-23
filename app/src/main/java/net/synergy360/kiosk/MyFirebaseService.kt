@@ -1,82 +1,22 @@
 package net.synergy360.kiosk
 
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
+import android.app.admin.DevicePolicyManager
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import android.os.PowerManager
-import android.os.Handler
-import android.os.Looper
-import android.app.admin.DevicePolicyManager
-import net.synergy360.kiosk.ScheduleManager
-import android.content.Intent
 
 class MyFirebaseService : FirebaseMessagingService() {
-
-    /* --------------------------------------------------
-       🔵 AUTO-SCHEDULE LISTENER (Firestore → AlarmManager)
-       -------------------------------------------------- */
-    private var scheduleListener: com.google.firebase.firestore.ListenerRegistration? = null
-
-    override fun onCreate() {
-        super.onCreate()
-        startScheduleListener()
-    }
-
-    private fun startScheduleListener() {
-        try {
-            val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
-            val company = prefs.getString("company", "synergy3") ?: return
-
-            val db = FirebaseFirestore.getInstance()
-            val ref = db.collection("company")
-                .document(company)
-                .collection("settings")
-                .document("config")
-
-            scheduleListener?.remove()
-            scheduleListener = ref.addSnapshotListener { snap, err ->
-                if (err != null) {
-                    Log.e("SCHEDULE", "Listener error: ${err.message}")
-                    return@addSnapshotListener
-                }
-                if (snap == null || !snap.exists()) {
-                    Log.e("SCHEDULE", "Config missing")
-                    return@addSnapshotListener
-                }
-
-                val kiosk = snap.get("kiosk") as? Map<*, *> ?: return@addSnapshotListener
-                val sched = kiosk["sleepWakeSchedule"] as? Map<*, *> ?: return@addSnapshotListener
-
-                val day = java.time.LocalDate.now().dayOfWeek.name.lowercase()
-                val today = sched[day] as? Map<*, *> ?: return@addSnapshotListener
-
-                val enabled = today["enabled"] as? Boolean ?: false
-                if (!enabled) {
-                    Log.d("SCHEDULE", "Today disabled → cancel alarms")
-                    ScheduleManager.applySchedule(applicationContext, "25:00", "26:00")
-                    return@addSnapshotListener
-                }
-
-                val sleep = today["sleep"] as? String ?: return@addSnapshotListener
-                val wake = today["wake"] as? String ?: return@addSnapshotListener
-
-                Log.d("SCHEDULE", "Applying schedule from Firestore: $day sleep=$sleep wake=$wake")
-                ScheduleManager.applySchedule(applicationContext, sleep, wake)
-            }
-
-            Log.d("SCHEDULE", "Schedule listener started (company=$company)")
-        } catch (e: Exception) {
-            Log.e("SCHEDULE", "Failed to start listener: ${e.message}")
-        }
-    }
 
     /* --------------------------------------------------
        🔵 HELPERS
        -------------------------------------------------- */
 
     /** Sleep helper (Device Owner only) */
-    private fun sleepDevice() : Boolean {
+    private fun sleepDevice(): Boolean {
         return try {
             val dpm = getSystemService(DevicePolicyManager::class.java)
             dpm.lockNow()
@@ -141,7 +81,8 @@ class MyFirebaseService : FirebaseMessagingService() {
             FirebaseFirestore.getInstance()
                 .collection("fcmEvents")
                 .add(data)
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
     }
 
     /* --------------------------------------------------
@@ -165,16 +106,31 @@ class MyFirebaseService : FirebaseMessagingService() {
         when (command) {
 
             /* -----------------------------
-               🕑 SCHEDULE UPDATE
+               🕑 СТАРЫЙ ВАРИАНТ: set_schedule (только sleep/wake)
                ----------------------------- */
             "set_schedule" -> {
                 val sleep = data["sleep"]
                 val wake = data["wake"]
                 if (!sleep.isNullOrEmpty() && !wake.isNullOrEmpty()) {
+                    // Старый формат — просто ставим будильники на текущий день
                     ScheduleManager.applySchedule(this, sleep, wake)
-                    ack(cmdId, true, "schedule_applied")
+                    ack(cmdId, true, "schedule_applied_simple")
                 } else {
                     ack(cmdId, false, "missing_sleep_or_wake")
+                }
+            }
+
+            /* -----------------------------
+               🗓 НОВЫЙ ВАРИАНТ: set_full_schedule (все 7 дней в JSON)
+               ----------------------------- */
+            "set_full_schedule" -> {
+                val json = data["scheduleJson"]
+                if (json.isNullOrEmpty()) {
+                    ack(cmdId, false, "missing_scheduleJson")
+                } else {
+                    ScheduleManager.saveFullSchedule(this, json)
+                    ScheduleManager.applyTodayFromPrefs(this)
+                    ack(cmdId, true, "full_schedule_saved_and_applied")
                 }
             }
 
@@ -270,7 +226,7 @@ class MyFirebaseService : FirebaseMessagingService() {
     }
 
     /* --------------------------------------------------
-       🔵 TOKEN
+       🔄 TOKEN
        -------------------------------------------------- */
     override fun onNewToken(token: String) {
         Log.d("FCM", "🔄 New token: $token")
