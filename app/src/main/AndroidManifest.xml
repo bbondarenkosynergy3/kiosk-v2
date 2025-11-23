@@ -4,7 +4,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
@@ -17,6 +16,7 @@
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:resizeableActivity="false">
 
+        <!-- MAIN ACTIVITY -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -29,10 +29,9 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
         </activity>
 
-        <!-- Единственный FCM receiver -->
+        <!-- FCM -->
         <service
             android:name=".MyFirebaseService"
             android:exported="false">
@@ -41,8 +40,7 @@
             </intent-filter>
         </service>
 
-        <!-- Удалено: FCMCommandReceiver -->
-
+        <!-- DEVICE ADMIN -->
         <receiver
             android:name=".MyDeviceAdminReceiver"
             android:exported="true"
@@ -58,46 +56,59 @@
             </intent-filter>
         </receiver>
 
+        <!-- BOOT -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </receiver>
 
-        <!-- AlarmManager receivers for sleep/wake -->
+        <!-- SLEEP ALARM -->
         <receiver
             android:name=".SleepAlarmReceiver"
+            android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="kiosk.sleep"/>
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </receiver>
 
+        <!-- WAKE ALARM -->
+        <receiver
+            android:name=".WakeAlarmReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="kiosk.wake"/>
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
+
+        <!-- DAY SWITCH -->
         <receiver
             android:name=".DaySwitchReceiver"
+            android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="kiosk.day_switch"/>
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </receiver>
 
-        <receiver
-            android:name=".WakeAlarmReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="kiosk.wake"/>
-            </intent-filter>
-        </receiver>
-
+        <!-- CENTRAL SLEEP/WAKE RECEIVER -->
         <receiver
             android:name=".SleepWakeReceiver"
-            android:exported="false">
+            android:enabled="true"
+            android:exported="true">
             <intent-filter>
                 <action android:name="kiosk.sleep"/>
                 <action android:name="kiosk.wake"/>
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </receiver>
 
