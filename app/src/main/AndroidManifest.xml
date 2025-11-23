@@ -64,5 +64,22 @@
             </intent-filter>
         </receiver>
 
+        <!-- AlarmManager receivers for sleep/wake -->
+        <receiver
+            android:name=".SleepAlarmReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="kiosk.sleep"/>
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".WakeAlarmReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="kiosk.wake"/>
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>
