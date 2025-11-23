@@ -8,6 +8,7 @@ import android.os.PowerManager
 import android.os.Handler
 import android.os.Looper
 import android.app.admin.DevicePolicyManager
+import net.synergy360.kiosk.ScheduleManager
 
 class MyFirebaseService : FirebaseMessagingService() {
 
@@ -103,6 +104,20 @@ class MyFirebaseService : FirebaseMessagingService() {
         val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
 
         when (command) {
+
+            /* -----------------------------
+               🕑 SCHEDULE UPDATE
+               ----------------------------- */
+            "set_schedule" -> {
+                val sleep = data["sleep"]
+                val wake = data["wake"]
+                if (!sleep.isNullOrEmpty() && !wake.isNullOrEmpty()) {
+                    ScheduleManager.applySchedule(this, sleep, wake)
+                    ack(cmdId, true, "schedule_applied")
+                } else {
+                    ack(cmdId, false, "missing_sleep_or_wake")
+                }
+            }
 
             /* -----------------------------
                🛏 SLEEP
