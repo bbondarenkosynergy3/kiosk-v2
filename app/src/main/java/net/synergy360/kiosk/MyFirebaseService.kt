@@ -43,7 +43,7 @@ class MyFirebaseService : FirebaseMessagingService() {
             wl.acquire(3000)
             wl.release()
 
-            Log.d("WAKE", "Wake via wakelock (power-button simulation)")
+            Log.d("WAKE", "Wake via wakelock")
             logFs("wake_executed", "screen on by wakelock")
             true
         } catch (e: Exception) {
@@ -53,7 +53,7 @@ class MyFirebaseService : FirebaseMessagingService() {
         }
     }
 
-    /** Авто-retry для wake (если Firestore listener был спящий) */
+    /** Авто-retry для WAKE (если экран в Doze) */
     private fun wakeWithRetry() {
         if (wakeDeviceLikePower()) return
 
@@ -81,8 +81,7 @@ class MyFirebaseService : FirebaseMessagingService() {
             FirebaseFirestore.getInstance()
                 .collection("fcmEvents")
                 .add(data)
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) {}
     }
 
     /* --------------------------------------------------
@@ -106,22 +105,7 @@ class MyFirebaseService : FirebaseMessagingService() {
         when (command) {
 
             /* -----------------------------
-               🕑 СТАРЫЙ ВАРИАНТ: set_schedule (только sleep/wake)
-               ----------------------------- */
-            "set_schedule" -> {
-                val sleep = data["sleep"]
-                val wake = data["wake"]
-                if (!sleep.isNullOrEmpty() && !wake.isNullOrEmpty()) {
-                    // Старый формат — просто ставим будильники на текущий день
-                    ScheduleManager.applySchedule(this, sleep, wake)
-                    ack(cmdId, true, "schedule_applied_simple")
-                } else {
-                    ack(cmdId, false, "missing_sleep_or_wake")
-                }
-            }
-
-            /* -----------------------------
-               🗓 НОВЫЙ ВАРИАНТ: set_full_schedule (все 7 дней в JSON)
+               🗓 НОВЫЙ ВАРИАНТ: set_full_schedule
                ----------------------------- */
             "set_full_schedule" -> {
                 val json = data["scheduleJson"]
@@ -129,7 +113,7 @@ class MyFirebaseService : FirebaseMessagingService() {
                     ack(cmdId, false, "missing_scheduleJson")
                 } else {
                     ScheduleManager.saveFullSchedule(this, json)
-                    ScheduleManager.applyTodayFromPrefs(this)
+                    ScheduleManager.applyTodayFromPrefs(this)  // <— важно!
                     ack(cmdId, true, "full_schedule_saved_and_applied")
                 }
             }
@@ -143,15 +127,15 @@ class MyFirebaseService : FirebaseMessagingService() {
             }
 
             /* -----------------------------
-               🌅 WAKE (with auto-retry)
+               🌅 WAKE
                ----------------------------- */
             "wake" -> {
                 wakeWithRetry()
-                ack(cmdId, true, "wake scheduled")
+                ack(cmdId, true, "wake triggered")
             }
 
             /* -----------------------------
-               🔄 RELOAD
+               🔄 RELOAD WEBVIEW
                ----------------------------- */
             "reload" -> {
                 prefs.edit().putBoolean("pending_reload", true).apply()
@@ -159,7 +143,7 @@ class MyFirebaseService : FirebaseMessagingService() {
             }
 
             /* -----------------------------
-               📡 UPDATE (OTA)
+               📡 UPDATE
                ----------------------------- */
             "update_now", "update" -> {
                 val url = data["url"]
@@ -191,7 +175,7 @@ class MyFirebaseService : FirebaseMessagingService() {
     }
 
     /* --------------------------------------------------
-       🔵 ACK COMMAND
+       🔵 ACK to Firestore
        -------------------------------------------------- */
     private fun ack(cmdId: String, ok: Boolean, msg: String) {
         val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
@@ -252,7 +236,7 @@ class MyFirebaseService : FirebaseMessagingService() {
             .document(id)
             .set(update, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener {
-                Log.d("FIRESTORE", "✅ token updated for $id (company=$company)")
+                Log.d("FIRESTORE", "✅ token updated for $id")
             }
             .addOnFailureListener { e ->
                 Log.e("FIRESTORE", "❌ token update fail", e)
