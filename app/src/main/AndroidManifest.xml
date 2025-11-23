@@ -89,5 +89,14 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".SleepWakeReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="kiosk.sleep"/>
+                <action android:name="kiosk.wake"/>
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>
