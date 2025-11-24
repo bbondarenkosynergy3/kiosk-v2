@@ -2,6 +2,7 @@ package net.synergy360.kiosk
 
 import android.app.admin.DevicePolicyManager
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.PowerManager
@@ -13,15 +14,24 @@ class SleepWakeReceiver : BroadcastReceiver() {
         val action = intent.action
         Log.d("SCHEDULE", "SleepWakeReceiver onReceive: action=$action")
 
+        val dpm = context.getSystemService(DevicePolicyManager::class.java)
+        val admin = ComponentName(context, MyDeviceAdminReceiver::class.java)
+
         when (action) {
 
             "kiosk.sleep" -> {
                 try {
-                    val dpm = context.getSystemService(DevicePolicyManager::class.java)
-                    dpm.lockNow()
-                    Log.d("SCHEDULE", "Device locked from alarm (kiosk.sleep)")
+                    if (dpm != null && dpm.isAdminActive(admin)) {
+                        try {
+                            dpm.setKeyguardDisabled(admin, false)
+                        } catch (_: Exception) { }
+                        dpm.lockNow()
+                        Log.d("SCHEDULE", "Device locked by schedule (kiosk.sleep)")
+                    } else {
+                        Log.w("SCHEDULE", "Device owner not active → kiosk.sleep ignored")
+                    }
                 } catch (e: Exception) {
-                    Log.e("SCHEDULE", "lockNow() failed: ${e.message}")
+                    Log.e("SCHEDULE", "sleep failed: ${e.message}")
                 }
             }
 
