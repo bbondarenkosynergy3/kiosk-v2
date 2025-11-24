@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Color
 import android.os.*
+import android.provider.Settings
 import android.util.Log
 import android.view.*
 import android.webkit.*
@@ -38,6 +39,10 @@ class MainActivity : Activity() {
             prefs.edit().putString("device_id", id).apply()
             id
         }
+    }
+
+    private val androidId: String by lazy {
+        Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
     }
 
     private val heartbeatHandler = Handler(Looper.getMainLooper())
@@ -78,14 +83,37 @@ class MainActivity : Activity() {
         } catch (_: Exception) {}
     }
 
+    private fun fetchCompany(callback: (String) -> Unit) {
+        val ref = db.collection("deviceAssignments").document(androidId)
+        ref.get().addOnSuccessListener { snap ->
+            if (snap != null && snap.exists()) {
+                val company = snap.getString("company") ?: "synergy3"
+                val storedDeviceId = snap.getString("deviceId") ?: deviceId
+                prefs.edit().putString("company", company)
+                    .putString("device_id", storedDeviceId).apply()
+                callback(company)
+            } else {
+                val info = mapOf(
+                    "company" to "synergy3",
+                    "deviceId" to deviceId,
+                    "updatedAt" to System.currentTimeMillis()
+                )
+                ref.set(info, SetOptions.merge()).addOnSuccessListener {
+                    prefs.edit().putString("company", "synergy3")
+                        .putString("device_id", deviceId).apply()
+                    callback("synergy3")
+                }
+            }
+        }.addOnFailureListener { callback("synergy3") }
+    }
+
     // -------------------------------------------------------
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         try { FirebaseApp.initializeApp(this) } catch (_: Exception) {}
 
-        if (!prefs.contains("company"))
-            prefs.edit().putString("company", "synergy3").apply()
+        fetchCompany { continueStartup() }
 
         window.decorView.systemUiVisibility =
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
@@ -96,8 +124,6 @@ class MainActivity : Activity() {
 
         root = FrameLayout(this)
         setContentView(root)
-
-        initWebView()
 
         // admin gesture layer
         val touchLayer = object : View(this) {
@@ -116,7 +142,10 @@ class MainActivity : Activity() {
             )
         )
         enableTestModeDetector(touchLayer)
-        // FCM
+    }
+
+    private fun continueStartup() {
+        initWebView()
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
                 registerDevice(token)
@@ -317,9 +346,26 @@ class MainActivity : Activity() {
                     } catch (e: Exception) {
                         ack(cmdId, false, "update failed: ${e.message}")
                     }
-}
+                }
 
                 "ping" -> ack(cmdId, true, "pong")
+
+                "set_company" -> {
+                    val newCompany = snap.getString("newCompany") ?: return@addSnapshotListener
+                    db.collection("deviceAssignments").document(androidId)
+                        .set(mapOf("company" to newCompany, "deviceId" to deviceId,
+                                   "updatedAt" to System.currentTimeMillis()), SetOptions.merge())
+                        .addOnSuccessListener {
+                            val currentData = snap.data ?: emptyMap<String, Any>()
+                            db.collection("company").document(newCompany)
+                                .collection("devices").document(deviceId)
+                                .set(currentData, SetOptions.merge())
+                            prefs.edit().putString("company", newCompany).apply()
+                            val url = "https://360synergy.net/kiosk3/public/feedback.html?company=$newCompany&id=$deviceId"
+                            try { webView.loadUrl(url) } catch (_: Exception) {}
+                            ack(cmdId, true, "company switched")
+                        }
+                }
 
                 else -> ack(cmdId, false, "unknown")
             }
