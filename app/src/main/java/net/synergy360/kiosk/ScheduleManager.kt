@@ -12,178 +12,185 @@ import java.util.Calendar
 object ScheduleManager {
 
     private const val PREFS = "schedule_prefs"
+    private const val KEY_FULL = "full_json"
+
+    // -------------------------------------------------------
+    // Public API
+    // -------------------------------------------------------
 
     fun saveFullSchedule(context: Context, json: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString("full_schedule", json)
-            .apply()
-
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_FULL, json).apply()
         Log.d("SCHEDULE", "Full schedule saved to prefs")
+
+        applyTodayFromPrefs(context)
     }
 
+    /**
+     * Вызывается:
+     *  - после FCM команды set_full_schedule
+     *  - после BOOT_COMPLETED
+     *  - после смены дня (DaySwitchReceiver)
+     */
     fun applyTodayFromPrefs(context: Context) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val json = prefs.getString("full_schedule", null)
+        val json = prefs.getString(KEY_FULL, null)
 
-        if (json == null) {
-            Log.d("SCHEDULE", "No full_schedule in prefs")
+        if (json.isNullOrBlank()) {
+            Log.d("SCHEDULE", "No schedule in prefs → cancel all + wake")
+            cancelAll(context)
+            sendActionBroadcast(context, "wake")
             return
         }
 
-        val obj = JSONObject(json)
+        val all = JSONObject(json)
+        val nowCal = Calendar.getInstance()
+        val dayKey = dayKey(nowCal)
 
-        val days = listOf(
-            "sunday", "monday", "tuesday",
-            "wednesday", "thursday", "friday", "saturday"
+        val today = all.optJSONObject(dayKey)
+        if (today == null || !today.optBoolean("enabled", false)) {
+            Log.d("SCHEDULE", "Day $dayKey disabled or missing → cancel + wake")
+            cancelAll(context)
+            sendActionBroadcast(context, "wake")
+            return
+        }
+
+        val sleep = today.optString("sleep", "").trim()
+        val wake = today.optString("wake", "").trim()
+
+        if (sleep.isBlank() || wake.isBlank()) {
+            Log.d("SCHEDULE", "Day $dayKey has empty sleep/wake → cancel + wake")
+            cancelAll(context)
+            sendActionBroadcast(context, "wake")
+            return
+        }
+
+        // 1) Ставим новые будильники
+        cancelAll(context)
+        scheduleAlarms(context, sleep, wake, nowCal)
+
+        // 2) Определяем, что должно происходить прямо сейчас
+        val nowStr = String.format("%02d:%02d",
+            nowCal.get(Calendar.HOUR_OF_DAY),
+            nowCal.get(Calendar.MINUTE)
+        )
+        val action = getCurrentAction(sleep, wake, nowStr)
+
+        Log.d(
+            "SCHEDULE",
+            "applyToday: $dayKey sleep=$sleep wake=$wake now=$nowStr → action=$action"
         )
 
-        val cal = Calendar.getInstance()
-        val today = days[cal.get(Calendar.DAY_OF_WEEK) - 1]
-
-        if (!obj.has(today)) {
-            Log.e("SCHEDULE", "No schedule for today=$today")
-            return
-        }
-
-        val dayObj = obj.getJSONObject(today)
-        val enabled = dayObj.optBoolean("enabled", false)
-
-        if (!enabled) {
-            Log.d("SCHEDULE", "Schedule disabled for $today")
-            // на всякий случай снимем любые старые будильники
-            cancel(context)
-            return
-        }
-
-        val sleep = dayObj.optString("sleep", null)
-        val wake = dayObj.optString("wake", null)
-
-        Log.d("SCHEDULE", "applyToday: $today sleep=$sleep wake=$wake")
-
-        // 1) Ставим будильники на этот день (без переносов на завтра)
-        applySchedule(context, sleep, wake)
-
-        // 2) Немедленно применяем состояние на сейчас (sleep/wake),
-        // чтобы не ждать будильник, если время уже прошло
-        evaluateAndApplyNow(context, sleep, wake)
+        sendActionBroadcast(context, action)
     }
 
-    fun applySchedule(context: Context, sleep: String?, wake: String?) {
-        cancel(context)
+    // -------------------------------------------------------
+    // Alarm helpers
+    // -------------------------------------------------------
 
-        if (sleep != null) setAlarm(context, sleep, "sleep")
-        if (wake != null) setAlarm(context, wake, "wake")
+    private fun cancelAll(context: Context) {
+        val am = context.getSystemService(AlarmManager::class.java)
 
-        Log.d("SCHEDULE", "Schedule applied sleep=$sleep wake=$wake")
-    }
+        am.cancel(pending(context, "kiosk.sleep", 1))
+        am.cancel(pending(context, "kiosk.wake", 2))
 
-    fun cancel(context: Context) {
-        val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        listOf("sleep", "wake").forEach { type ->
-            val intent = Intent("kiosk.$type")
-            val pi = PendingIntent.getBroadcast(
-                context,
-                type.hashCode(),
-                intent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-            am.cancel(pi)
-        }
         Log.d("SCHEDULE", "All schedule alarms cancelled")
     }
 
-    /**
-     * Ставим AlarmManager на указанное время ТЕКУЩЕГО дня.
-     *
-     * ВАЖНО:
-     *  - Больше НЕ переносим на следующий день, если время в прошлом.
-     *  - Если время уже прошло, AlarmManager должен сработать почти сразу.
-     */
-    private fun setAlarm(context: Context, time: String, type: String) {
-        val (hour, min) = try {
-            time.split(":").map { it.toInt() }
-        } catch (e: Exception) {
-            Log.e("SCHEDULE", "Invalid time format for '$type': '$time'")
-            return
+    private fun scheduleAlarms(
+        context: Context,
+        sleep: String,
+        wake: String,
+        now: Calendar
+    ) {
+        val am = context.getSystemService(AlarmManager::class.java)
+
+        val sleepCal = timeToCalendar(now, sleep)
+        val wakeCal = timeToCalendar(now, wake)
+
+        // гарантируем, что оба времени лежат в будущем
+        if (!sleepCal.after(now)) sleepCal.add(Calendar.DATE, 1)
+        if (!wakeCal.after(now))  wakeCal.add(Calendar.DATE, 1)
+
+        setExact(am, sleepCal.timeInMillis, pending(context, "kiosk.sleep", 1))
+        setExact(am, wakeCal.timeInMillis, pending(context, "kiosk.wake", 2))
+
+        Log.d(
+            "SCHEDULE",
+            "Alarm set for sleep at ${sleepCal.time} (now=${now.time})"
+        )
+        Log.d(
+            "SCHEDULE",
+            "Alarm set for wake at ${wakeCal.time} (now=${now.time})"
+        )
+    }
+
+    private fun pending(context: Context, action: String, requestCode: Int): PendingIntent {
+        val i = Intent(context, SleepWakeReceiver::class.java).apply {
+            this.action = action
         }
 
-        val now = Calendar.getInstance()
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0
 
-        val cal = Calendar.getInstance().apply {
-            timeInMillis = System.currentTimeMillis()
-            set(Calendar.HOUR_OF_DAY, hour)
-            set(Calendar.MINUTE, min)
+        return PendingIntent.getBroadcast(context, requestCode, i, flags)
+    }
+
+    private fun setExact(am: AlarmManager, triggerAt: Long, pi: PendingIntent) {
+        if (Build.VERSION.SDK_INT >= 23) {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+        } else {
+            am.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+        }
+    }
+
+    private fun sendActionBroadcast(context: Context, action: String) {
+        val intent = Intent(
+            if (action == "sleep") "kiosk.sleep" else "kiosk.wake"
+        ).apply { setPackage(context.packageName) }
+
+        context.sendBroadcast(intent)
+        Log.d("SCHEDULE", "Broadcast sent: ${intent.action}")
+    }
+
+    // -------------------------------------------------------
+    // Time helpers
+    // -------------------------------------------------------
+
+    private fun dayKey(cal: Calendar): String =
+        when (cal.get(Calendar.DAY_OF_WEEK)) {
+            Calendar.MONDAY -> "monday"
+            Calendar.TUESDAY -> "tuesday"
+            Calendar.WEDNESDAY -> "wednesday"
+            Calendar.THURSDAY -> "thursday"
+            Calendar.FRIDAY -> "friday"
+            Calendar.SATURDAY -> "saturday"
+            else -> "sunday"
+        }
+
+    private fun timeToCalendar(base: Calendar, hhmm: String): Calendar {
+        val parts = hhmm.split(":")
+        val h = parts.getOrNull(0)?.toIntOrNull() ?: 0
+        val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
+
+        return (base.clone() as Calendar).apply {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
-            // БЕЗ add(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, h)
+            set(Calendar.MINUTE, m)
         }
-
-        val inPast = cal.before(now)
-
-        val intent = Intent("kiosk.$type")
-
-        val pi = PendingIntent.getBroadcast(
-            context,
-            type.hashCode(),
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
-        // SAFE — без SCHEDULE_EXACT_ALARM
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pi)
-        } else {
-            am.set(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pi)
-        }
-
-        Log.d(
-            "SCHEDULE",
-            "Alarm set for $type at ${cal.time} (now=${now.time}, inPast=$inPast)"
-        )
     }
 
     /**
-     * Считаем, что должно быть ПРЯМО СЕЙЧАС (sleep / wake) и шлём broadcast.
-     * Логика такая же, как в Cloud Functions (evaluateAction).
+     * Логика "спим / бодрствуем" на основе трёх строк HH:mm
      */
-    private fun evaluateAndApplyNow(context: Context, sleep: String?, wake: String?) {
-        if (sleep.isNullOrBlank() || wake.isNullOrBlank()) {
-            Log.d("SCHEDULE", "evaluateNow: missing sleep or wake → skip")
-            return
-        }
+    fun getCurrentAction(sleep: String, wake: String, now: String): String {
 
-        val cal = Calendar.getInstance()
-        val hh = cal.get(Calendar.HOUR_OF_DAY)
-        val mm = cal.get(Calendar.MINUTE)
-        val nowStr = String.format("%02d:%02d", hh, mm)
-
-        val action = evaluateAction(sleep, wake, nowStr)
-        Log.d(
-            "SCHEDULE",
-            "evaluateNow: now=$nowStr sleep=$sleep wake=$wake → action=$action"
-        )
-
-        if (action == null) return
-
-        val intent = Intent("kiosk.$action")
-        context.sendBroadcast(intent)
-
-        Log.d("SCHEDULE", "Broadcast sent: kiosk.$action")
-    }
-
-    /**
-     * Копия evaluateAction из index.ts:
-     * - если sleep > wake → интервал через полночь
-     * - иначе обычный интервал
-     */
-    private fun evaluateAction(sleep: String, wake: String, now: String): String? {
         fun toMin(t: String): Int {
-            val parts = t.split(":")
-            if (parts.size != 2) return 0
-            return parts[0].toIntOrNull()?.times(60)?.plus(parts[1].toIntOrNull() ?: 0) ?: 0
+            val p = t.split(":")
+            val h = p.getOrNull(0)?.toIntOrNull() ?: 0
+            val m = p.getOrNull(1)?.toIntOrNull() ?: 0
+            return h * 60 + m
         }
 
         val S = toMin(sleep)
