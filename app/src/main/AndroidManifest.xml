@@ -1,14 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-
-    <!-- Device Admin permission -->
     <uses-permission
         android:name="android.permission.BIND_DEVICE_ADMIN"
         tools:ignore="ProtectedPermissions" />
@@ -18,7 +15,6 @@
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:resizeableActivity="false">
 
-        <!-- MAIN ACTIVITY -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -28,71 +24,63 @@
             android:hardwareAccelerated="true">
 
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
 
-        <!-- FCM -->
         <service
             android:name=".MyFirebaseService"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
             </intent-filter>
         </service>
 
-        <!-- DEVICE ADMIN -->
         <receiver
             android:name=".MyDeviceAdminReceiver"
             android:exported="true"
             android:permission="android.permission.BIND_DEVICE_ADMIN">
             <meta-data
                 android:name="android.app.device_admin"
-                android:resource="@xml/device_admin_receiver" />
+                android:resource="@xml/device_admin_receiver"/>
 
             <intent-filter>
-                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
-                <category android:name="android.intent.category.DEFAULT" />
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED"/>
+                <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
 
             <intent-filter>
-                <action android:name="android.app.action.PROVISIONING_SUCCESSFUL" />
-                <category android:name="android.intent.category.DEFAULT" />
+                <action android:name="android.app.action.PROVISIONING_SUCCESSFUL"/>
+                <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </receiver>
 
-        <!-- BOOT COMPLETED -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <category android:name="android.intent.category.DEFAULT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>
         </receiver>
 
-        <!-- CENTRAL SLEEP/WAKE RECEIVER (единственный) -->
         <receiver
             android:name=".SleepWakeReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
-                <action android:name="kiosk.sleep" />
-                <action android:name="kiosk.wake" />
-                <category android:name="android.intent.category.DEFAULT" />
+                <action android:name="kiosk.sleep"/>
+                <action android:name="kiosk.wake"/>
             </intent-filter>
         </receiver>
 
-        <!-- DAY SWITCH -->
         <receiver
             android:name=".DaySwitchReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
-                <action android:name="kiosk.day_switch" />
-                <category android:name="android.intent.category.DEFAULT" />
+                <action android:name="kiosk.day_switch"/>
             </intent-filter>
         </receiver>
 
