@@ -405,23 +405,23 @@ class MainActivity : Activity() {
         }
     }
 
-    private var testTapCount = 0
-    private var lastTestTap = 0L
-    
-    private fun enableTestModeDetector() {
-        root.setOnClickListener {
-            val now = System.currentTimeMillis()
-            if (now - lastTestTap < 1500) {
-                testTapCount++
-                if (testTapCount >= 5) {
-                    startActivity(Intent(this, TestActivity::class.java))
-                    testTapCount = 0
+        private var testTapCount = 0
+        private var lastTestTap = 0L
+        
+        private fun enableTestModeDetector(touchLayer: View) {
+            touchLayer.setOnClickListener {
+                val now = System.currentTimeMillis()
+                if (now - lastTestTap < 1500) {
+                    testTapCount++
+                    if (testTapCount >= 5) {
+                        startActivity(Intent(this, TestActivity::class.java))
+                        testTapCount = 0
+                    }
+                } else {
+                    testTapCount = 1
                 }
-            } else {
-                testTapCount = 1
+                lastTestTap = now
             }
-            lastTestTap = now
         }
-}
 
 }
