@@ -8,8 +8,15 @@ import android.content.BroadcastReceiver
 import android.util.Log
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class UpdateHelper(private val ctx: Context) {
+
+    // Чтобы не вызвать reboot дважды
+    @Volatile
+    private var rebootTriggered = false
 
     init {
         registerUpdateReceiver()
@@ -18,22 +25,43 @@ class UpdateHelper(private val ctx: Context) {
     private fun registerUpdateReceiver() {
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_MY_PACKAGE_REPLACED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
             addDataScheme("package")
         }
 
         ctx.registerReceiver(object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                val pkg = intent.data?.schemeSpecificPart ?: return
+
+                // Иногда data == null (freeze state), игнорировать нельзя
+                val pkg = intent.data?.schemeSpecificPart ?: context.packageName
+
                 if (pkg != context.packageName) return
+                if (rebootTriggered) return
 
-                Log.i("UPDATE", "APK updated → rebooting device")
+                rebootTriggered = true
 
-                try {
-                    val dpm = context.getSystemService(DevicePolicyManager::class.java)
-                    val admin = ComponentName(context, MyDeviceAdminReceiver::class.java)
-                    dpm.reboot(admin)
-                } catch (e: Exception) {
-                    Log.e("UPDATE", "Failed to reboot after update: ${e.message}")
+                Log.i("UPDATE", "APK updated → preparing to reboot…")
+
+                // DO ОБНОВЛЕНИЕ: freeze снимается через 300–1500 мс
+                GlobalScope.launch {
+                    delay(1200) // самое стабильное окно
+
+                    try {
+                        val dpm = context.getSystemService(DevicePolicyManager::class.java)
+                        val admin = ComponentName(context, MyDeviceAdminReceiver::class.java)
+
+                        Log.i("UPDATE", "Performing DO reboot…")
+                        dpm.reboot(admin)
+                    } catch (e: Exception) {
+                        Log.e("UPDATE", "DO reboot failed: ${e.message}")
+
+                        // fallback (редко, но бывает)
+                        try {
+                            Runtime.getRuntime().exec("reboot")
+                        } catch (ee: Exception) {
+                            Log.e("UPDATE", "Fallback reboot failed: ${ee.message}")
+                        }
+                    }
                 }
             }
         }, filter)
@@ -70,7 +98,7 @@ class UpdateHelper(private val ctx: Context) {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
                 )
 
-                session.commit(pending.intentSender)
+                session.commit(pending.intentSender) // NOTE: reboot поймает ресивер
                 session.close()
 
             } catch (e: Exception) {
