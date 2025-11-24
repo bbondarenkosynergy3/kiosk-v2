@@ -115,7 +115,7 @@ class MainActivity : Activity() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
-
+        enableTestModeDetector(touchLayer)
         // FCM
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
