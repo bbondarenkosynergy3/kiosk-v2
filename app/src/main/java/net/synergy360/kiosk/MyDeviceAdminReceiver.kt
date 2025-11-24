@@ -8,32 +8,31 @@ import android.os.Build
 import com.google.firebase.firestore.FirebaseFirestore
 
 class MyDeviceAdminReceiver : DeviceAdminReceiver() {
+
     override fun onEnabled(context: Context, intent: Intent) {
-        Log.i("DeviceOwner", "✅ Device admin enabled")
-        // Log event to Firestore
+        Log.i("DeviceOwner", "Device admin enabled")
         try {
-            val data = mapOf(
-                "event" to "device_admin_enabled",
-                "timestamp" to System.currentTimeMillis(),
-                "device" to Build.MODEL,
-                "build" to Build.DISPLAY
+            FirebaseFirestore.getInstance().collection("startupLogs").add(
+                mapOf(
+                    "event" to "device_admin_enabled",
+                    "timestamp" to System.currentTimeMillis(),
+                    "device" to Build.MODEL,
+                    "build" to Build.DISPLAY
+                )
             )
-            FirebaseFirestore.getInstance().collection("startupLogs").add(data)
-        } catch (e: Exception) {
-            Log.e("DeviceOwner", "Failed to log device admin enabled to Firestore: ${e.message}")
+        } catch (_: Exception) { }
+    }
+
+    override fun onProfileProvisioningComplete(context: Context, intent: Intent) {
+        Log.i("DeviceOwner", "Provisioning complete → launching MainActivity")
+        Intent(context, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(this)
         }
     }
-    override fun onProfileProvisioningComplete(context: Context, intent: Intent) {
-        Log.i("DeviceOwner", "🎉 Provisioning complete — launching MainActivity")
-        val launch = Intent(context, MainActivity::class.java)
-        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(launch)
-    }
-    override fun onDisabled(context: Context, intent: Intent) {
-        Log.i("DeviceOwner", "❌ Device admin disabled")
-    }
+
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        Log.i("DeviceOwner", "📡 Received broadcast: ${intent.action}")
+        Log.i("DeviceOwner", "Receiver action: ${intent.action}")
     }
 }
