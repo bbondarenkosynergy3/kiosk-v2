@@ -404,4 +404,24 @@ class MainActivity : Activity() {
                         View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
         }
     }
+
+    private var testTapCount = 0
+    private var lastTestTap = 0L
+    
+    private fun enableTestModeDetector() {
+        root.setOnClickListener {
+            val now = System.currentTimeMillis()
+            if (now - lastTestTap < 1500) {
+                testTapCount++
+                if (testTapCount >= 5) {
+                    startActivity(Intent(this, TestActivity::class.java))
+                    testTapCount = 0
+                }
+            } else {
+                testTapCount = 1
+            }
+            lastTestTap = now
+        }
+}
+
 }
