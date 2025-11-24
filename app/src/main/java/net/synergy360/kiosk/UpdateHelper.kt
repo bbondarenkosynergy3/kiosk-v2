@@ -12,31 +12,28 @@ import android.content.ComponentName
 class UpdateHelper(private val ctx: Context) {
 
     init {
-        // Регистрируем при создании helper
         registerUpdateReceiver()
     }
 
     private fun registerUpdateReceiver() {
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_MY_PACKAGE_REPLACED)
-            addAction(Intent.ACTION_PACKAGE_REPLACED)
             addDataScheme("package")
         }
 
         ctx.registerReceiver(object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                val pkg = intent.data?.schemeSpecificPart
-                if (pkg == context.packageName) {
-                    Log.i("UPDATE", "APK updated, rebooting device…")
+                val pkg = intent.data?.schemeSpecificPart ?: return
+                if (pkg != context.packageName) return
 
-                    try {
-                        val dpm = context.getSystemService(DevicePolicyManager::class.java)
-                        val admin = ComponentName(context, MyDeviceAdminReceiver::class.java)
+                Log.i("UPDATE", "APK updated → rebooting device")
 
-                        dpm.reboot(admin) // 💥 Мгновенная безопасная перезагрузка
-                    } catch (e: Exception) {
-                        Log.e("UPDATE", "Reboot failed: ${e.message}")
-                    }
+                try {
+                    val dpm = context.getSystemService(DevicePolicyManager::class.java)
+                    val admin = ComponentName(context, MyDeviceAdminReceiver::class.java)
+                    dpm.reboot(admin)
+                } catch (e: Exception) {
+                    Log.e("UPDATE", "Failed to reboot after update: ${e.message}")
                 }
             }
         }, filter)
@@ -45,33 +42,31 @@ class UpdateHelper(private val ctx: Context) {
     fun startUpdate(url: String) {
         Thread {
             try {
-                val connection = java.net.URL(url).openConnection()
-                connection.connect()
-                val input = connection.getInputStream()
-
                 val file = java.io.File(ctx.cacheDir, "update.apk")
-                val output = java.io.FileOutputStream(file)
-                input.copyTo(output)
-                output.close()
-                input.close()
 
-                val packageInstaller = ctx.packageManager.packageInstaller
+                java.net.URL(url).openStream().use { input ->
+                    java.io.FileOutputStream(file).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                val installer = ctx.packageManager.packageInstaller
                 val params = android.content.pm.PackageInstaller.SessionParams(
                     android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL
                 )
 
-                val sessionId = packageInstaller.createSession(params)
-                val session = packageInstaller.openSession(sessionId)
+                val sessionId = installer.createSession(params)
+                val session = installer.openSession(sessionId)
 
-                val out = session.openWrite("package", 0, -1)
-                java.io.FileInputStream(file).use { it.copyTo(out) }
-                session.fsync(out)
-                out.close()
+                session.openWrite("package", 0, -1).use { out ->
+                    java.io.FileInputStream(file).use { input ->
+                        input.copyTo(out)
+                        session.fsync(out)
+                    }
+                }
 
-                // Даже если MainActivity не запустится — reboot решит всё.
-                val intent = Intent(ctx, MainActivity::class.java)
                 val pending = PendingIntent.getActivity(
-                    ctx, 0, intent,
+                    ctx, 0, Intent(ctx, MainActivity::class.java),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
                 )
 
