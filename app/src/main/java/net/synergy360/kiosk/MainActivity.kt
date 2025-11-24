@@ -301,11 +301,11 @@ class MainActivity : Activity() {
                         "https://github.com/bbondarenkosynergy3/kiosk-v2/releases/latest/download/synergy360-kiosk-release-v.apk"
                     try {
                         UpdateHelper(this).startUpdate(url)
-                        ackCommand(cmdId, true, "update started")
+                        ack(cmdId, true, "update started")
                     } catch (e: Exception) {
-                        ackCommand(cmdId, false, "update failed: ${e.message}")
+                        ack(cmdId, false, "update failed: ${e.message}")
                     }
-                }
+}
 
                 "ping" -> ack(cmdId, true, "pong")
 
