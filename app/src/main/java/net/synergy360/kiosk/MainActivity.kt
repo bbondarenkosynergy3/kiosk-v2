@@ -147,7 +147,19 @@ class MainActivity : Activity() {
                 request: WebResourceRequest,
                 error: WebResourceError
             ) {
-                showOffline("Reconnecting…")
+                // 🔇 Silent reconnect: логируем ошибку и мягко перезагружаем только main-frame
+                logEvent(
+                    "WEB_ERROR",
+                    "code=${error.errorCode} desc=${error.description} url=${request.url}"
+                )
+
+                if (request.isForMainFrame) {
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        try {
+                            view.reload()
+                        } catch (_: Exception) {}
+                    }, 3_000L)
+                }
             }
             override fun onPageFinished(v: WebView?, url: String?) {
                 hideOffline()
