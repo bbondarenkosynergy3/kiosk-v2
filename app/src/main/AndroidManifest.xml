@@ -22,16 +22,16 @@
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:launchMode="singleTop"
             android:hardwareAccelerated="true">
-            
-        <activity android:name=".TestActivity"
-            android:excludeFromRecents="true"
-            android:exported="false" />
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <activity android:name=".TestActivity"
+            android:excludeFromRecents="true"
+            android:exported="false" />
 
         <service
             android:name=".MyFirebaseService"
