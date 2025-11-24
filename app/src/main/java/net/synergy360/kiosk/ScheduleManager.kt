@@ -51,7 +51,7 @@ object ScheduleManager {
         if (today == null || !today.optBoolean("enabled", false)) {
             Log.d("SCHEDULE", "Day $dayKey disabled or missing → cancel + wake")
             cancelAll(context)
-            sendActionBroadcast(context, "wake")
+            sendActionBroadcast(context, "sleep")
             return
         }
 
