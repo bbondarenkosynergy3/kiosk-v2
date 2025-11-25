@@ -230,6 +230,11 @@ class MainActivity : Activity() {
         initWebView()
         startSettingsListener(getCompany())
         startScheduleListener(getCompany())
+
+        try {
+            startForegroundService(Intent(this, ForegroundService::class.java))
+        } catch (_: Exception) {}
+        
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
                 registerDevice(token)
