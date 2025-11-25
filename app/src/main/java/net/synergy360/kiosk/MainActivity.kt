@@ -10,7 +10,6 @@ import android.os.*
 import android.provider.Settings
 import android.util.Log
 import android.view.*
-import android.media.AudioManager
 import android.view.KeyEvent
 import android.webkit.*
 import android.widget.FrameLayout
@@ -62,7 +61,7 @@ class MainActivity : Activity() {
     //  New corner-tap gesture system
     // -------------------------------------------------------
 
-    private var tlCount = 0       // top-left taps for Test Mode
+    private var tlCount = 0
     private var blCount = 0       // bottom-left taps for Exit
     private var tlLastTap = 0L
     private var blLastTap = 0L
@@ -77,15 +76,12 @@ class MainActivity : Activity() {
         val now = SystemClock.uptimeMillis()
 
         when {
-            // -----------------------------
-            //  🔵 Top-left corner → TEST MODE
-            // -----------------------------
             x < m && y < m -> {
                 if (now - tlLastTap < 1500) {
                     tlCount++
                     if (tlCount >= 4) {
                         tlCount = 0
-                        startActivity(Intent(this, TestActivity::class.java))
+                        // Previously: startActivity(Intent(this, TestActivity::class.java))
                         return
                     }
                 } else {
@@ -93,7 +89,6 @@ class MainActivity : Activity() {
                 }
                 tlLastTap = now
             }
-
             // -----------------------------
             //  🔴 Bottom-left corner → EXIT
             // -----------------------------
@@ -168,37 +163,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun applyBrightness(value: Int) {
-        val admin = ComponentName(this, MyDeviceAdminReceiver::class.java)
-        val dpm = getSystemService(DevicePolicyManager::class.java)
-
-        val normalized = value.coerceIn(0, 255)
-
-        // Ensure manual mode
-        try {
-            dpm.setGlobalSetting(admin, Settings.System.SCREEN_BRIGHTNESS_MODE, "0")
-        } catch (_: Exception) {}
-
-        // Apply brightness using only DPM (Device Owner method)
-        try {
-            dpm.setGlobalSetting(admin, Settings.System.SCREEN_BRIGHTNESS, normalized.toString())
-        } catch (_: Exception) {}
-
-        // Log application result
-        try {
-            Log.d("BRIGHTNESS", "Applied: $normalized")
-        } catch (_: Exception) {}
-    }
-
-    private fun applyVolume(value: Int) {
-        val audio = getSystemService(AudioManager::class.java)
-        val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        val safe = value.coerceIn(0, 100)
-        val v = (max * safe) / 100
-        try {
-            audio.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0)
-        } catch (_: Exception) {}
-    }
 
     private fun fetchCompany(callback: (String) -> Unit) {
         val ref = db.collection("deviceAssignments").document(androidId)
