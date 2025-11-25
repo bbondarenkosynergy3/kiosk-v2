@@ -37,6 +37,11 @@
             </intent-filter>
         </service>
 
+        <service
+            android:name=".ForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync|connectedDevice|location" />
+
         <receiver
             android:name=".MyDeviceAdminReceiver"
             android:exported="true"
