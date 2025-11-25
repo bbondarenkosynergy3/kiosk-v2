@@ -53,16 +53,57 @@ class MainActivity : Activity() {
         }
     }
 
-    // admin gesture
-    private val gestureWindowMs = 5_000L
-    private val tappedCorners = mutableSetOf<Int>()
-    private var gestureStartTs = 0L
+    // -------------------------------------------------------
+    //  New corner-tap gesture system
+    // -------------------------------------------------------
 
-    companion object {
-        private const val CORNER_TL = 1
-        private const val CORNER_TR = 2
-        private const val CORNER_BL = 3
-        private const val CORNER_BR = 4
+    private var tlCount = 0       // top-left taps for Test Mode
+    private var blCount = 0       // bottom-left taps for Exit
+    private var tlLastTap = 0L
+    private var blLastTap = 0L
+
+    private fun handleCornerTap(x: Float, y: Float) {
+        val w = resources.displayMetrics.widthPixels
+        val h = resources.displayMetrics.heightPixels
+        val m = (w.coerceAtMost(h) * 0.15f)
+
+        val now = SystemClock.uptimeMillis()
+
+        when {
+            // -----------------------------
+            //  🔵 Top-left corner → TEST MODE
+            // -----------------------------
+            x < m && y < m -> {
+                if (now - tlLastTap < 1500) {
+                    tlCount++
+                    if (tlCount >= 4) {
+                        tlCount = 0
+                        startActivity(Intent(this, TestActivity::class.java))
+                        return
+                    }
+                } else {
+                    tlCount = 1
+                }
+                tlLastTap = now
+            }
+
+            // -----------------------------
+            //  🔴 Bottom-left corner → EXIT
+            // -----------------------------
+            x < m && y > h - m -> {
+                if (now - blLastTap < 1500) {
+                    blCount++
+                    if (blCount >= 4) {
+                        blCount = 0
+                        confirmExit()
+                        return
+                    }
+                } else {
+                    blCount = 1
+                }
+                blLastTap = now
+            }
+        }
     }
 
     // -------------------------------------------------------
@@ -141,7 +182,6 @@ class MainActivity : Activity() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
-        enableTestModeDetector(touchLayer)
     }
 
     private fun continueStartup() {
@@ -257,35 +297,6 @@ class MainActivity : Activity() {
         offlineBanner?.visibility = View.GONE
     }
 
-    // -------------------------------------------------------
-    private fun handleCornerTap(x: Float, y: Float) {
-        val w = resources.displayMetrics.widthPixels
-        val h = resources.displayMetrics.heightPixels
-        val m = (w.coerceAtMost(h) * 0.15f)
-
-        val corner = when {
-            x < m && y < m -> CORNER_TL
-            x > w - m && y < m -> CORNER_TR
-            x < m && y > h - m -> CORNER_BL
-            x > w - m && y > h - m -> CORNER_BR
-            else -> 0
-        }
-        if (corner == 0) return
-
-        val now = SystemClock.uptimeMillis()
-        if (gestureStartTs == 0L || now - gestureStartTs > gestureWindowMs) {
-            gestureStartTs = now
-            tappedCorners.clear()
-        }
-
-        tappedCorners.add(corner)
-
-        if (tappedCorners.size == 4 && now - gestureStartTs <= gestureWindowMs) {
-            gestureStartTs = 0L
-            tappedCorners.clear()
-            confirmExit()
-        }
-    }
 
     private fun confirmExit() {
         AlertDialog.Builder(this)
@@ -356,7 +367,10 @@ class MainActivity : Activity() {
                         .set(mapOf("company" to newCompany, "deviceId" to deviceId,
                                    "updatedAt" to System.currentTimeMillis()), SetOptions.merge())
                         .addOnSuccessListener {
-                            val currentData = snap.data ?: emptyMap<String, Any>()
+                            val currentData = (snap.data ?: emptyMap<String, Any>())
+                                .toMutableMap()
+                            currentData["company"] = newCompany
+
                             db.collection("company").document(newCompany)
                                 .collection("devices").document(deviceId)
                                 .set(currentData, SetOptions.merge())
@@ -451,23 +465,5 @@ class MainActivity : Activity() {
         }
     }
 
-        private var testTapCount = 0
-        private var lastTestTap = 0L
-        
-        private fun enableTestModeDetector(touchLayer: View) {
-            touchLayer.setOnClickListener {
-                val now = System.currentTimeMillis()
-                if (now - lastTestTap < 1500) {
-                    testTapCount++
-                    if (testTapCount >= 5) {
-                        startActivity(Intent(this, TestActivity::class.java))
-                        testTapCount = 0
-                    }
-                } else {
-                    testTapCount = 1
-                }
-                lastTestTap = now
-            }
-        }
 
 }
