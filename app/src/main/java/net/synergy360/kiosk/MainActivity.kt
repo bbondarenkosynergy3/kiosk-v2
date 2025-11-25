@@ -21,6 +21,7 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.messaging.FirebaseMessaging
 import java.util.UUID
+import org.json.JSONObject
 
 class MainActivity : Activity() {
 
@@ -131,96 +132,39 @@ class MainActivity : Activity() {
     }
 
     private fun startSettingsListener(company: String) {
-        try { settingsReg?.remove() } catch (_: Exception) {}
-
-        val ref = db.collection("company")
-            .document(company)
-            .collection("settings")
-            .document("kiosk")
-
-        settingsReg = ref.addSnapshotListener { snap, _ ->
-            if (snap == null || !snap.exists()) {
-                val defaults = mapOf(
-                    "brightness" to 128,
-                    "volume" to 50,
-                    "volumeLocked" to false,
-                    "updatedAt" to System.currentTimeMillis()
-                )
-                ref.set(defaults, SetOptions.merge())
-                applyBrightness(128)
-                applyVolume(50)
-                prefs.edit().putBoolean("volumeLocked", false).apply()
-                return@addSnapshotListener
-            }
-
-            val brightness = snap.getLong("brightness")?.toInt() ?: 128
-            val volume = snap.getLong("volume")?.toInt() ?: 50
-            val volumeLocked = snap.getBoolean("volumeLocked") ?: false
-
-            applyBrightness(brightness)
-            applyVolume(volume)
-            prefs.edit().putBoolean("volumeLocked", volumeLocked).apply()
-
-            // Optionally, check for missing fields and set them if any
-            val missing = mutableMapOf<String, Any>()
-            if (!snap.contains("brightness")) missing["brightness"] = 128
-            if (!snap.contains("volume")) missing["volume"] = 50
-            if (!snap.contains("volumeLocked")) missing["volumeLocked"] = false
-            if (missing.isNotEmpty()) {
-                val settingsRef = ref
-                settingsRef.set(missing, SetOptions.merge())
-            }
-        }
     }
 
     private fun startScheduleListener(company: String) {
         try { scheduleReg?.remove() } catch (_: Exception) {}
 
-        val scheduleRef = db.collection("company")
+        val ref = db.collection("company")
             .document(company)
             .collection("settings")
             .document("schedule")
 
-        // --- default full schedule JSON ---
-        val defaultScheduleJson = """
-            {
-              "monday":{"enabled":false,"sleep":"23:00","wake":"07:00"},
-              "tuesday":{"enabled":false,"sleep":"23:00","wake":"07:00"},
-              "wednesday":{"enabled":false,"sleep":"23:00","wake":"07:00"},
-              "thursday":{"enabled":false,"sleep":"23:00","wake":"07:00"},
-              "friday":{"enabled":false,"sleep":"23:00","wake":"07:00"},
-              "saturday":{"enabled":false,"sleep":"23:00","wake":"07:00"},
-              "sunday":{"enabled":false,"sleep":"23:00","wake":"07:00"}
-            }
-        """.trimIndent()
-
-        scheduleReg = scheduleRef.addSnapshotListener { snap, _ ->
+        scheduleReg = ref.addSnapshotListener { snap, _ ->
             if (snap == null || !snap.exists()) {
                 val defaults = mapOf(
-                    "fullJson" to defaultScheduleJson,
-                    "updatedAt" to System.currentTimeMillis()
+                    "monday" to mapOf("enabled" to false, "sleep" to "23:00", "wake" to "07:00"),
+                    "tuesday" to mapOf("enabled" to false, "sleep" to "23:00", "wake" to "07:00"),
+                    "wednesday" to mapOf("enabled" to false, "sleep" to "23:00", "wake" to "07:00"),
+                    "thursday" to mapOf("enabled" to false, "sleep" to "23:00", "wake" to "07:00"),
+                    "friday" to mapOf("enabled" to false, "sleep" to "23:00", "wake" to "07:00"),
+                    "saturday" to mapOf("enabled" to false, "sleep" to "23:00", "wake" to "07:00"),
+                    "sunday" to mapOf("enabled" to false, "sleep" to "23:00", "wake" to "07:00")
                 )
-                scheduleRef.set(defaults, SetOptions.merge())
-                ScheduleManager.saveFullSchedule(this, defaultScheduleJson)
+                ref.set(defaults, SetOptions.merge())
+                val json = JSONObject(defaults).toString()
+                ScheduleManager.saveFullSchedule(this, json)
                 ScheduleManager.applyTodayFromPrefs(this)
                 return@addSnapshotListener
             }
 
-            val json = snap.getString("fullJson")
-            if (json.isNullOrBlank()) {
-                scheduleRef.set(
-                    mapOf(
-                        "fullJson" to defaultScheduleJson,
-                        "updatedAt" to System.currentTimeMillis()
-                    ),
-                    SetOptions.merge()
-                )
-                ScheduleManager.saveFullSchedule(this, defaultScheduleJson)
-                ScheduleManager.applyTodayFromPrefs(this)
-            } else {
-                ScheduleManager.saveFullSchedule(this, json)
-                ScheduleManager.applyTodayFromPrefs(this)
-            }
+            val map = snap.data ?: return@addSnapshotListener
+            val json = JSONObject(map).toString()
+
+            ScheduleManager.saveFullSchedule(this, json)
+            ScheduleManager.applyTodayFromPrefs(this)
         }
     }
 
