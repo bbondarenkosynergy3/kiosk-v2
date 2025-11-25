@@ -42,7 +42,7 @@ class MainActivity : Activity() {
             val id = "${Build.MODEL}_${UUID.randomUUID().toString().take(8)}"
             prefs.edit().putString("device_id", id).apply()
             id
-            }
+        }
     }
 
     private val androidId: String by lazy {
@@ -141,70 +141,46 @@ class MainActivity : Activity() {
             .collection("settings")
             .document("schedule")
 
+        // --- default full schedule JSON ---
+        val defaultScheduleJson = """
+            {
+              "monday":{"enabled":false,"sleep":"23:00","wake":"07:00"},
+              "tuesday":{"enabled":false,"sleep":"23:00","wake":"07:00"},
+              "wednesday":{"enabled":false,"sleep":"23:00","wake":"07:00"},
+              "thursday":{"enabled":false,"sleep":"23:00","wake":"07:00"},
+              "friday":{"enabled":false,"sleep":"23:00","wake":"07:00"},
+              "saturday":{"enabled":false,"sleep":"23:00","wake":"07:00"},
+              "sunday":{"enabled":false,"sleep":"23:00","wake":"07:00"}
+            }
+        """.trimIndent()
+
         scheduleReg = scheduleRef.addSnapshotListener { snap, _ ->
             if (snap == null || !snap.exists()) {
                 val defaults = mapOf(
-                    "fullJson" to "{}",
+                    "fullJson" to defaultScheduleJson,
                     "updatedAt" to System.currentTimeMillis()
                 )
                 scheduleRef.set(defaults, SetOptions.merge())
+                ScheduleManager.saveFullSchedule(this, defaultScheduleJson)
+                ScheduleManager.applyTodayFromPrefs(this)
                 return@addSnapshotListener
             }
 
             val json = snap.getString("fullJson")
-            if (!json.isNullOrBlank()) {
+            if (json.isNullOrBlank()) {
+                scheduleRef.set(
+                    mapOf(
+                        "fullJson" to defaultScheduleJson,
+                        "updatedAt" to System.currentTimeMillis()
+                    ),
+                    SetOptions.merge()
+                )
+                ScheduleManager.saveFullSchedule(this, defaultScheduleJson)
+                ScheduleManager.applyTodayFromPrefs(this)
+            } else {
                 ScheduleManager.saveFullSchedule(this, json)
                 ScheduleManager.applyTodayFromPrefs(this)
             }
-        }
-        try { settingsReg?.remove() } catch (_: Exception) {}
-
-        val kioskRef = db.collection("company")
-            .document(company)
-            .collection("settings")
-            .document("kiosk")
-
-        settingsReg = kioskRef.addSnapshotListener { snap, _ ->
-            if (snap == null || !snap.exists()) {
-                val defaults = mapOf(
-                    "brightness" to 180,
-                    "volume" to 70,
-                    "volumeLocked" to false,
-                    "brightnessLocked" to false,
-                    "updatedAt" to System.currentTimeMillis()
-                )
-                kioskRef.set(defaults, SetOptions.merge())
-                applyBrightness(180)
-                applyVolume(70)
-                prefs.edit()
-                    .putBoolean("volumeLocked", false)
-                    .putBoolean("brightnessLocked", false)
-                    .apply()
-                return@addSnapshotListener
-            }
-
-            val brightness = snap.getLong("brightness")?.toInt()
-            val volume = snap.getLong("volume")?.toInt()
-            val lockVol = snap.getBoolean("volumeLocked") ?: false
-            val lockBr = snap.getBoolean("brightnessLocked") ?: false
-
-            val missing = mutableMapOf<String, Any>()
-            if (brightness == null) missing["brightness"] = 180
-            if (volume == null) missing["volume"] = 70
-            if (!snap.contains("volumeLocked")) missing["volumeLocked"] = false
-            if (!snap.contains("brightnessLocked")) missing["brightnessLocked"] = false
-            if (missing.isNotEmpty()) {
-                missing["updatedAt"] = System.currentTimeMillis()
-                kioskRef.set(missing, SetOptions.merge())
-            }
-
-            if (brightness != null) applyBrightness(brightness)
-            if (volume != null) applyVolume(volume)
-
-            prefs.edit()
-                .putBoolean("volumeLocked", lockVol)
-                .putBoolean("brightnessLocked", lockBr)
-                .apply()
         }
     }
 
