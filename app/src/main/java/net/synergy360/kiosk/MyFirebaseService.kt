@@ -241,5 +241,8 @@ class MyFirebaseService : FirebaseMessagingService() {
             .addOnFailureListener { e ->
                 Log.e("FIRESTORE", "❌ token update fail", e)
             }
+        try {
+            startForegroundService(Intent(this, ForegroundService::class.java))
+        } catch (_: Exception) {}
     }
 }
