@@ -138,12 +138,38 @@ class MainActivity : Activity() {
             .document("kiosk")
 
         settingsReg = ref.addSnapshotListener { snap, _ ->
-            if (snap == null || !snap.exists()) return@addSnapshotListener
+            if (snap == null || !snap.exists()) {
+                val defaults = mapOf(
+                    "brightness" to 180,
+                    "volume" to 70,
+                    "volumeLocked" to false,
+                    "brightnessLocked" to false,
+                    "updatedAt" to System.currentTimeMillis()
+                )
+                ref.set(defaults, SetOptions.merge())
+                applyBrightness(180)
+                applyVolume(70)
+                prefs.edit()
+                    .putBoolean("volumeLocked", false)
+                    .putBoolean("brightnessLocked", false)
+                    .apply()
+                return@addSnapshotListener
+            }
 
             val brightness = snap.getLong("brightness")?.toInt()
             val volume = snap.getLong("volume")?.toInt()
             val lockVol = snap.getBoolean("volumeLocked") ?: false
             val lockBr = snap.getBoolean("brightnessLocked") ?: false
+
+            val missing = mutableMapOf<String, Any>()
+            if (brightness == null) missing["brightness"] = 180
+            if (volume == null) missing["volume"] = 70
+            if (!snap.contains("volumeLocked")) missing["volumeLocked"] = false
+            if (!snap.contains("brightnessLocked")) missing["brightnessLocked"] = false
+            if (missing.isNotEmpty()) {
+                missing["updatedAt"] = System.currentTimeMillis()
+                ref.set(missing, SetOptions.merge())
+            }
 
             if (brightness != null) applyBrightness(brightness)
             if (volume != null) applyVolume(volume)
