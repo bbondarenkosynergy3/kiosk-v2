@@ -361,6 +361,16 @@ class MainActivity : Activity() {
 
                 "ping" -> ack(cmdId, true, "pong")
 
+                "open_url" -> {
+                    val url = snap.get("payload")?.let { it as? Map<*, *> }?.get("url") as? String
+                    if (url != null) {
+                        try { webView.loadUrl(url) } catch (_: Exception) {}
+                        ack(cmdId, true, "opened url")
+                    } else {
+                        ack(cmdId, false, "missing url")
+                    }
+                }
+
                 "set_company" -> {
                     val newCompany = snap.getString("newCompany") ?: return@addSnapshotListener
 
