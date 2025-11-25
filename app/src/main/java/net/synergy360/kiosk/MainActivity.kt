@@ -136,18 +136,18 @@ class MainActivity : Activity() {
     private fun startScheduleListener(company: String) {
         try { scheduleReg?.remove() } catch (_: Exception) {}
 
-        val ref = db.collection("company")
+        val scheduleRef = db.collection("company")
             .document(company)
             .collection("settings")
             .document("schedule")
 
-        scheduleReg = ref.addSnapshotListener { snap, _ ->
+        scheduleReg = scheduleRef.addSnapshotListener { snap, _ ->
             if (snap == null || !snap.exists()) {
                 val defaults = mapOf(
                     "fullJson" to "{}",
                     "updatedAt" to System.currentTimeMillis()
                 )
-                ref.set(defaults, SetOptions.merge())
+                scheduleRef.set(defaults, SetOptions.merge())
                 return@addSnapshotListener
             }
 
@@ -159,12 +159,12 @@ class MainActivity : Activity() {
         }
         try { settingsReg?.remove() } catch (_: Exception) {}
 
-        val ref = db.collection("company")
+        val kioskRef = db.collection("company")
             .document(company)
             .collection("settings")
             .document("kiosk")
 
-        settingsReg = ref.addSnapshotListener { snap, _ ->
+        settingsReg = kioskRef.addSnapshotListener { snap, _ ->
             if (snap == null || !snap.exists()) {
                 val defaults = mapOf(
                     "brightness" to 180,
@@ -173,7 +173,7 @@ class MainActivity : Activity() {
                     "brightnessLocked" to false,
                     "updatedAt" to System.currentTimeMillis()
                 )
-                ref.set(defaults, SetOptions.merge())
+                kioskRef.set(defaults, SetOptions.merge())
                 applyBrightness(180)
                 applyVolume(70)
                 prefs.edit()
@@ -195,7 +195,7 @@ class MainActivity : Activity() {
             if (!snap.contains("brightnessLocked")) missing["brightnessLocked"] = false
             if (missing.isNotEmpty()) {
                 missing["updatedAt"] = System.currentTimeMillis()
-                ref.set(missing, SetOptions.merge())
+                kioskRef.set(missing, SetOptions.merge())
             }
 
             if (brightness != null) applyBrightness(brightness)
