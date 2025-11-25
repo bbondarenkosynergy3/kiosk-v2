@@ -363,21 +363,47 @@ class MainActivity : Activity() {
 
                 "set_company" -> {
                     val newCompany = snap.getString("newCompany") ?: return@addSnapshotListener
+
+                    // Update deviceAssignments first
                     db.collection("deviceAssignments").document(androidId)
-                        .set(mapOf("company" to newCompany, "deviceId" to deviceId,
-                                   "updatedAt" to System.currentTimeMillis()), SetOptions.merge())
+                        .set(
+                            mapOf(
+                                "company" to newCompany,
+                                "deviceId" to deviceId,
+                                "updatedAt" to System.currentTimeMillis()
+                            ),
+                            SetOptions.merge()
+                        )
                         .addOnSuccessListener {
-                            val currentData = (snap.data ?: emptyMap<String, Any>())
-                                .toMutableMap()
+
+                            // Copy old device data and update company field
+                            val currentData = (snap.data ?: emptyMap<String, Any>()).toMutableMap()
                             currentData["company"] = newCompany
 
+                            // Write the device into the new company collection
                             db.collection("company").document(newCompany)
                                 .collection("devices").document(deviceId)
                                 .set(currentData, SetOptions.merge())
-                            prefs.edit().putString("company", newCompany).apply()
-                            val url = "https://360synergy.net/kiosk3/public/feedback.html?company=$newCompany&id=$deviceId"
-                            try { webView.loadUrl(url) } catch (_: Exception) {}
-                            ack(cmdId, true, "company switched")
+                                .addOnSuccessListener {
+
+                                    // Update local prefs
+                                    prefs.edit().putString("company", newCompany).apply()
+
+                                    // Remove OLD listener
+                                    try { commandReg?.remove() } catch (_: Exception) {}
+                                    commandReg = null
+
+                                    // Start NEW listener
+                                    startCommandListener()
+
+                                    // Reload WebView with new company
+                                    val url =
+                                        "https://360synergy.net/kiosk3/public/feedback.html?company=$newCompany&id=$deviceId"
+                                    try { webView.loadUrl(url) } catch (_: Exception) {}
+
+                                    // ACK (now goes to new company because prefs already updated)
+                                    ack(cmdId, true, "company switched")
+                                }
                         }
                 }
 
