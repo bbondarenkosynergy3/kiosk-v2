@@ -569,4 +569,76 @@ class MainActivity : Activity() {
         }
         return super.dispatchKeyEvent(event)
     }
+
+    // =====================================================================
+//  ANTI-TAMPER — запрет выхода из киоска
+// =====================================================================
+override fun onUserLeaveHint() {
+    super.onUserLeaveHint()
+    Log.d("ANTI_TAMPER", "HOME/RECENTS pressed → restoring MainActivity")
+
+    Handler(Looper.getMainLooper()).postDelayed({
+        val i = Intent(this, MainActivity::class.java)
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        startActivity(i)
+    }, 300)
+}
+
+// Полная блокировка кнопки BACK
+override fun onBackPressed() {
+    // блокируем кнопку назад
+}
+
+// =====================================================================
+//  WATCHDOG — проверка зависания WebView
+// =====================================================================
+private val watchdogHandler = Handler(Looper.getMainLooper())
+private var watchdogFails = 0
+
+private val watchdogRunnable = object : Runnable {
+    override fun run() {
+        try {
+            webView.evaluateJavascript("(function(){ return 'ping_' + Date.now(); })();") { result ->
+                if (result != null && result.contains("ping_")) {
+                    watchdogFails = 0
+                } else {
+                    watchdogFails++
+                }
+            }
+        } catch (_: Exception) {
+            watchdogFails++
+        }
+
+        // если WebView завис → reload
+        if (watchdogFails == 3) {
+            Log.e("WATCHDOG", "WebView freeze → reload()")
+            try { webView.reload() } catch (_: Exception) {}
+        }
+
+        // если WebView мёртв → рестарт Activity
+        if (watchdogFails >= 6) {
+            Log.e("WATCHDOG", "WebView DEAD → restartApp()")
+            restartApp()
+        }
+
+        watchdogHandler.postDelayed(this, 15000)
+    }
+}
+
+        private fun restartApp() {
+            val i = packageManager.getLaunchIntentForPackage(packageName)
+            i?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(i)
+            finish()
+        }
+        
+        override fun onResume() {
+            super.onResume()
+            watchdogHandler.postDelayed(watchdogRunnable, 20000)
+        }
+        
+        override fun onPause() {
+            super.onPause()
+            watchdogHandler.removeCallbacks(watchdogRunnable)
+        }
 }
