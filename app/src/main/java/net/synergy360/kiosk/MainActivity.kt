@@ -131,6 +131,46 @@ class MainActivity : Activity() {
     }
 
     private fun startSettingsListener(company: String) {
+        try { settingsReg?.remove() } catch (_: Exception) {}
+
+        val ref = db.collection("company")
+            .document(company)
+            .collection("settings")
+            .document("kiosk")
+
+        settingsReg = ref.addSnapshotListener { snap, _ ->
+            if (snap == null || !snap.exists()) {
+                val defaults = mapOf(
+                    "brightness" to 128,
+                    "volume" to 50,
+                    "volumeLocked" to false,
+                    "updatedAt" to System.currentTimeMillis()
+                )
+                ref.set(defaults, SetOptions.merge())
+                applyBrightness(128)
+                applyVolume(50)
+                prefs.edit().putBoolean("volumeLocked", false).apply()
+                return@addSnapshotListener
+            }
+
+            val brightness = snap.getLong("brightness")?.toInt() ?: 128
+            val volume = snap.getLong("volume")?.toInt() ?: 50
+            val volumeLocked = snap.getBoolean("volumeLocked") ?: false
+
+            applyBrightness(brightness)
+            applyVolume(volume)
+            prefs.edit().putBoolean("volumeLocked", volumeLocked).apply()
+
+            // Optionally, check for missing fields and set them if any
+            val missing = mutableMapOf<String, Any>()
+            if (!snap.contains("brightness")) missing["brightness"] = 128
+            if (!snap.contains("volume")) missing["volume"] = 50
+            if (!snap.contains("volumeLocked")) missing["volumeLocked"] = false
+            if (missing.isNotEmpty()) {
+                val settingsRef = ref
+                settingsRef.set(missing, SetOptions.merge())
+            }
+        }
     }
 
     private fun startScheduleListener(company: String) {
