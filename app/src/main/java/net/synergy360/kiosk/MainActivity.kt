@@ -31,6 +31,7 @@ class MainActivity : Activity() {
     private var offlineBanner: TextView? = null
     private var commandReg: ListenerRegistration? = null
     private var settingsReg: ListenerRegistration? = null
+    private var scheduleReg: ListenerRegistration? = null
 
     private var webViewInitialized = false
 
@@ -130,6 +131,32 @@ class MainActivity : Activity() {
     }
 
     private fun startSettingsListener(company: String) {
+    }
+
+    private fun startScheduleListener(company: String) {
+        try { scheduleReg?.remove() } catch (_: Exception) {}
+
+        val ref = db.collection("company")
+            .document(company)
+            .collection("settings")
+            .document("schedule")
+
+        scheduleReg = ref.addSnapshotListener { snap, _ ->
+            if (snap == null || !snap.exists()) {
+                val defaults = mapOf(
+                    "fullJson" to "{}",
+                    "updatedAt" to System.currentTimeMillis()
+                )
+                ref.set(defaults, SetOptions.merge())
+                return@addSnapshotListener
+            }
+
+            val json = snap.getString("fullJson")
+            if (!json.isNullOrBlank()) {
+                ScheduleManager.saveFullSchedule(this, json)
+                ScheduleManager.applyTodayFromPrefs(this)
+            }
+        }
         try { settingsReg?.remove() } catch (_: Exception) {}
 
         val ref = db.collection("company")
@@ -278,6 +305,7 @@ class MainActivity : Activity() {
     private fun continueStartup() {
         initWebView()
         startSettingsListener(getCompany())
+        startScheduleListener(getCompany())
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
                 registerDevice(token)
@@ -493,6 +521,10 @@ class MainActivity : Activity() {
                                     try { settingsReg?.remove() } catch (_: Exception) {}
                                     settingsReg = null
                                     startSettingsListener(newCompany)
+
+                                    try { scheduleReg?.remove() } catch (_: Exception) {}
+                                    scheduleReg = null
+                                    startScheduleListener(newCompany)
 
                                     try { commandReg?.remove() } catch (_: Exception) {}
                                     commandReg = null
