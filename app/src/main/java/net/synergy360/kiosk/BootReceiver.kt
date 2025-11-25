@@ -20,6 +20,8 @@ class BootReceiver : BroadcastReceiver() {
                 context.startForegroundService(fg)
                 Log.d("BOOT", "ForegroundService started")
             } catch (e: Exception) {
+                Log.e("BOOT", "Failed to start ForegroundService: ${e.message}")
+            }
                 
 
             // 3. Запуск MainActivity
