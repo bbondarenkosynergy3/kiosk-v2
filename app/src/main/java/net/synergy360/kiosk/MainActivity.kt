@@ -42,7 +42,7 @@ class MainActivity : Activity() {
             val id = "${Build.MODEL}_${UUID.randomUUID().toString().take(8)}"
             prefs.edit().putString("device_id", id).apply()
             id
-        }
+            }
     }
 
     private val androidId: String by lazy {
