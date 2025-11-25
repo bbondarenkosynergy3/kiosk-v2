@@ -10,6 +10,8 @@ import android.os.*
 import android.provider.Settings
 import android.util.Log
 import android.view.*
+import android.media.AudioManager
+import android.view.KeyEvent
 import android.webkit.*
 import android.widget.FrameLayout
 import android.widget.TextView
@@ -28,6 +30,7 @@ class MainActivity : Activity() {
 
     private var offlineBanner: TextView? = null
     private var commandReg: ListenerRegistration? = null
+    private var settingsReg: ListenerRegistration? = null
 
     private var webViewInitialized = false
 
@@ -126,6 +129,52 @@ class MainActivity : Activity() {
         } catch (_: Exception) {}
     }
 
+    private fun startSettingsListener(company: String) {
+        try { settingsReg?.remove() } catch (_: Exception) {}
+
+        val ref = db.collection("company")
+            .document(company)
+            .collection("settings")
+            .document("kiosk")
+
+        settingsReg = ref.addSnapshotListener { snap, _ ->
+            if (snap == null || !snap.exists()) return@addSnapshotListener
+
+            val brightness = snap.getLong("brightness")?.toInt()
+            val volume = snap.getLong("volume")?.toInt()
+            val lockVol = snap.getBoolean("volumeLocked") ?: false
+            val lockBr = snap.getBoolean("brightnessLocked") ?: false
+
+            if (brightness != null) applyBrightness(brightness)
+            if (volume != null) applyVolume(volume)
+
+            prefs.edit()
+                .putBoolean("volumeLocked", lockVol)
+                .putBoolean("brightnessLocked", lockBr)
+                .apply()
+        }
+    }
+
+    private fun applyBrightness(value: Int) {
+        val dpm = getSystemService(DevicePolicyManager::class.java)
+        val admin = ComponentName(this, MyDeviceAdminReceiver::class.java)
+        val v = value.coerceIn(0, 255)
+        try {
+            dpm.setGlobalSetting(admin, Settings.System.SCREEN_BRIGHTNESS_MODE, "0")
+            dpm.setGlobalSetting(admin, Settings.System.SCREEN_BRIGHTNESS, v.toString())
+        } catch (_: Exception) {}
+    }
+
+    private fun applyVolume(value: Int) {
+        val audio = getSystemService(AudioManager::class.java)
+        val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val safe = value.coerceIn(0, 100)
+        val v = (max * safe) / 100
+        try {
+            audio.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0)
+        } catch (_: Exception) {}
+    }
+
     private fun fetchCompany(callback: (String) -> Unit) {
         val ref = db.collection("deviceAssignments").document(androidId)
         ref.get().addOnSuccessListener { snap ->
@@ -190,6 +239,7 @@ class MainActivity : Activity() {
 
     private fun continueStartup() {
         initWebView()
+        startSettingsListener(getCompany())
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
                 registerDevice(token)
@@ -402,6 +452,10 @@ class MainActivity : Activity() {
 
                                     prefs.edit().putString("company", newCompany).apply()
 
+                                    try { settingsReg?.remove() } catch (_: Exception) {}
+                                    settingsReg = null
+                                    startSettingsListener(newCompany)
+
                                     try { commandReg?.remove() } catch (_: Exception) {}
                                     commandReg = null
 
@@ -485,6 +539,7 @@ class MainActivity : Activity() {
         val admin = ComponentName(this, MyDeviceAdminReceiver::class.java)
 
         if (dpm.isDeviceOwnerApp(packageName)) {
+            try { dpm.setStatusBarDisabled(admin, true) } catch (_: Exception) {}
             try { dpm.setLockTaskPackages(admin, arrayOf(packageName)) } catch (_: Exception) {}
             try { startLockTask() } catch (_: Exception) {}
         }
@@ -498,5 +553,14 @@ class MainActivity : Activity() {
                         View.SYSTEM_UI_FLAG_FULLSCREEN or
                         View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
         }
+    }
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (prefs.getBoolean("volumeLocked", false)) {
+            val code = event.keyCode
+            if (code == KeyEvent.KEYCODE_VOLUME_UP || code == KeyEvent.KEYCODE_VOLUME_DOWN) {
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 }
