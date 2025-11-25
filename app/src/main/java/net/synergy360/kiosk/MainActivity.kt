@@ -62,6 +62,8 @@ class MainActivity : Activity() {
     private var tlLastTap = 0L
     private var blLastTap = 0L
 
+    private var touchLayer: View? = null
+
     private fun handleCornerTap(x: Float, y: Float) {
         val w = resources.displayMetrics.widthPixels
         val h = resources.displayMetrics.heightPixels
@@ -166,15 +168,17 @@ class MainActivity : Activity() {
         root = FrameLayout(this)
         setContentView(root)
 
-        // admin gesture layer
-        val touchLayer = object : View(this) {
+        // admin gesture layer (overlay)
+        touchLayer = object : View(this) {
             override fun onTouchEvent(e: MotionEvent?): Boolean {
                 if (e?.action == MotionEvent.ACTION_DOWN) {
                     handleCornerTap(e.x, e.y)
                 }
+                // не перехватываем событие, чтобы WebView продолжал работать
                 return false
             }
         }
+
         root.addView(
             touchLayer,
             FrameLayout.LayoutParams(
@@ -216,12 +220,10 @@ class MainActivity : Activity() {
                 request: WebResourceRequest,
                 error: WebResourceError
             ) {
-                // 🔇 Silent reconnect: логируем ошибку и мягко перезагружаем только main-frame
                 logEvent(
                     "WEB_ERROR",
                     "code=${error.errorCode} desc=${error.description} url=${request.url}"
                 )
-
                 if (request.isForMainFrame) {
                     Handler(Looper.getMainLooper()).postDelayed({
                         try {
@@ -242,6 +244,9 @@ class MainActivity : Activity() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
+
+        // важный момент — жестовый слой всегда поверх WebView
+        touchLayer?.bringToFront()
 
         webViewInitialized = true
     }
@@ -297,7 +302,6 @@ class MainActivity : Activity() {
         offlineBanner?.visibility = View.GONE
     }
 
-
     private fun confirmExit() {
         AlertDialog.Builder(this)
             .setTitle("Exit kiosk?")
@@ -347,7 +351,7 @@ class MainActivity : Activity() {
                     try { webView.reload() } catch (_: Exception) {}
                     ack(cmdId, true, "reloaded")
                 }
-                 
+
                 "update_now" -> {
                     val url =
                         "https://github.com/bbondarenkosynergy3/kiosk-v2/releases/latest/download/synergy360-kiosk-release-v.apk"
@@ -362,7 +366,9 @@ class MainActivity : Activity() {
                 "ping" -> ack(cmdId, true, "pong")
 
                 "open_url" -> {
-                    val url = snap.get("payload")?.let { it as? Map<*, *> }?.get("url") as? String
+                    val url = snap.get("payload")
+                        ?.let { it as? Map<*, *> }
+                        ?.get("url") as? String
                     if (url != null) {
                         try { webView.loadUrl(url) } catch (_: Exception) {}
                         ack(cmdId, true, "opened url")
@@ -374,7 +380,6 @@ class MainActivity : Activity() {
                 "set_company" -> {
                     val newCompany = snap.getString("newCompany") ?: return@addSnapshotListener
 
-                    // Update deviceAssignments first
                     db.collection("deviceAssignments").document(androidId)
                         .set(
                             mapOf(
@@ -386,32 +391,26 @@ class MainActivity : Activity() {
                         )
                         .addOnSuccessListener {
 
-                            // Copy old device data and update company field
-                            val currentData = (snap.data ?: emptyMap<String, Any>()).toMutableMap()
+                            val currentData =
+                                (snap.data ?: emptyMap<String, Any>()).toMutableMap()
                             currentData["company"] = newCompany
 
-                            // Write the device into the new company collection
                             db.collection("company").document(newCompany)
                                 .collection("devices").document(deviceId)
                                 .set(currentData, SetOptions.merge())
                                 .addOnSuccessListener {
 
-                                    // Update local prefs
                                     prefs.edit().putString("company", newCompany).apply()
 
-                                    // Remove OLD listener
                                     try { commandReg?.remove() } catch (_: Exception) {}
                                     commandReg = null
 
-                                    // Start NEW listener
                                     startCommandListener()
 
-                                    // Reload WebView with new company
                                     val url =
                                         "https://360synergy.net/kiosk3/public/feedback.html?company=$newCompany&id=$deviceId"
                                     try { webView.loadUrl(url) } catch (_: Exception) {}
 
-                                    // ACK (now goes to new company because prefs already updated)
                                     ack(cmdId, true, "company switched")
                                 }
                         }
@@ -500,6 +499,4 @@ class MainActivity : Activity() {
                         View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
         }
     }
-
-
 }
