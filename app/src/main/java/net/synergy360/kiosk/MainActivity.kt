@@ -231,8 +231,15 @@ class MainActivity : Activity() {
         startSettingsListener(getCompany())
         startScheduleListener(getCompany())
 
+        // 🔥 Автозапуск фонового сервиса
         try {
-            startForegroundService(Intent(this, ForegroundService::class.java))
+            val s = Intent(this, ForegroundService::class.java)
+        
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(s)
+            } else {
+                startService(s)
+            }
         } catch (_: Exception) {}
         
         FirebaseMessaging.getInstance().token
