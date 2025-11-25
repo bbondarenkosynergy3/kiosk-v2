@@ -24,22 +24,21 @@ class ForegroundService : Service() {
         startWatchdog()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d("FG_SERVICE", "ForegroundService started")
-
-        // Android 12+ protection (foreground restart)
-        if (Build.VERSION.SDK_INT >= 31) {
-            try {
-                startForeground(
-                    1,
-                    buildNotification(),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-                )
-            } catch (_: Exception) {}
+        override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+            Log.d("FG_SERVICE", "ForegroundService started")
+        
+            // Android 12+ защита — НО без указания типа!
+            if (Build.VERSION.SDK_INT >= 31) {
+                try {
+                    startForeground(
+                        1,
+                        buildNotification()
+                    )
+                } catch (_: Exception) {}
+            }
+        
+            return START_STICKY
         }
-
-        return START_STICKY
-    }
 
     override fun onDestroy() {
         super.onDestroy()
