@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.*
 import android.util.Log
+import android.content.pm.ServiceInfo
+import android.provider.Settings
 
 class ForegroundService : Service() {
 
