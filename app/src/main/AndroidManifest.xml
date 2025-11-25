@@ -42,8 +42,7 @@
 
         <service
             android:name=".ForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync|connectedDevice|location" />
+            android:exported="false"/>
 
         <receiver
             android:name=".MyDeviceAdminReceiver"
