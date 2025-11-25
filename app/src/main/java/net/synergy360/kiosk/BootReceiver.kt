@@ -12,12 +12,22 @@ class BootReceiver : BroadcastReceiver() {
 
             Log.d("BOOT", "BOOT_COMPLETED received → starting MainActivity")
 
-            // 1. Запуск MainActivity
+            // ---------------------------------------------------------
+            // 1) СТАРТУЕМ ForegroundService (НОВАЯ ВАЖНАЯ СТРОКА)
+            // ---------------------------------------------------------
+            try {
+                val fg = Intent(context, ForegroundService::class.java)
+                context.startForegroundService(fg)
+                Log.d("BOOT", "ForegroundService started")
+            } catch (e: Exception) {
+                
+
+            // 3. Запуск MainActivity
             val i = Intent(context, MainActivity::class.java)
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(i)
 
-            // 2. Восстановление расписания из local prefs
+            // 4. Восстановление расписания из local prefs
             restoreSchedule(context)
         }
     }
