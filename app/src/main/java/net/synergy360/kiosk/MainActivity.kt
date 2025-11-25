@@ -182,12 +182,28 @@ class MainActivity : Activity() {
     }
 
     private fun applyBrightness(value: Int) {
-        val dpm = getSystemService(DevicePolicyManager::class.java)
         val admin = ComponentName(this, MyDeviceAdminReceiver::class.java)
-        val v = value.coerceIn(0, 255)
+        val dpm = getSystemService(DevicePolicyManager::class.java)
+
+        val normalized = value.coerceIn(0, 255)
+
+        // 1) DPM write
         try {
             dpm.setGlobalSetting(admin, Settings.System.SCREEN_BRIGHTNESS_MODE, "0")
-            dpm.setGlobalSetting(admin, Settings.System.SCREEN_BRIGHTNESS, v.toString())
+            dpm.setGlobalSetting(admin, Settings.System.SCREEN_BRIGHTNESS, normalized.toString())
+        } catch (_: Exception) {}
+
+        // 2) Direct system write (fallback for ONN/Walmart)
+        try {
+            Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, 0)
+            Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, normalized)
+        } catch (_: Exception) {}
+
+        // 3) Try extended ranges for devices that use 0–1023
+        try {
+            val extended = (normalized * 4).coerceIn(0, 1023)
+            dpm.setGlobalSetting(admin, Settings.System.SCREEN_BRIGHTNESS, extended.toString())
+            Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, extended)
         } catch (_: Exception) {}
     }
 
