@@ -77,10 +77,20 @@ class ForegroundService : Service() {
     // ------------------------------------------------------------
     // SAFEST FOREGROUND START
     // ------------------------------------------------------------
-    private fun startAsForeground() {
-        val notification = buildNotification()
-        startForeground(1, notification)
-    }
+        private fun startAsForeground() {
+            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("360 Synergy Kiosk")
+                .setContentText("Running")
+                .setSmallIcon(R.drawable.ic_kiosk)
+                .setOngoing(true)
+                .build()
+        
+            // Без указания типа foreground-сервиса
+            startForeground(
+                NOTIFICATION_ID,
+                notification
+            )
+        }
 
     private fun buildNotification(): Notification {
         val channelId = "kiosk_fg_channel"
