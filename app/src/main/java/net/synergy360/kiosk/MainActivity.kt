@@ -522,23 +522,6 @@ class MainActivity : Activity() {
         deviceRef().set(data, SetOptions.merge())
     }
 
-    // -------------------------------------------------------
-    override fun onResume() {
-        super.onResume()
-
-        window.decorView.systemUiVisibility =
-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                    View.SYSTEM_UI_FLAG_FULLSCREEN
-
-        heartbeatHandler.post(heartbeatRunnable)
-        enableKiosk()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        heartbeatHandler.removeCallbacks(heartbeatRunnable)
-    }
 
     private fun enableKiosk() {
         val dpm = getSystemService(DevicePolicyManager::class.java)
@@ -590,6 +573,41 @@ override fun onBackPressed() {
 }
 
 // =====================================================================
+//  ОБЪЕДИНЁННЫЙ onResume()
+// =====================================================================
+override fun onResume() {
+    super.onResume()
+
+    // восстановление киоска
+    window.decorView.systemUiVisibility =
+        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_FULLSCREEN
+
+    // heartbeat
+    heartbeatHandler.post(heartbeatRunnable)
+
+    // kiosk mode
+    enableKiosk()
+
+    // watchdog
+    watchdogHandler.postDelayed(watchdogRunnable, 20000)
+}
+
+// =====================================================================
+//  ОБЪЕДИНЁННЫЙ onPause()
+// =====================================================================
+override fun onPause() {
+    super.onPause()
+
+    // heartbeat
+    heartbeatHandler.removeCallbacks(heartbeatRunnable)
+
+    // watchdog
+    watchdogHandler.removeCallbacks(watchdogRunnable)
+}
+
+// =====================================================================
 //  WATCHDOG — проверка зависания WebView
 // =====================================================================
 private val watchdogHandler = Handler(Looper.getMainLooper())
@@ -625,20 +643,10 @@ private val watchdogRunnable = object : Runnable {
     }
 }
 
-        private fun restartApp() {
-            val i = packageManager.getLaunchIntentForPackage(packageName)
-            i?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(i)
-            finish()
-        }
-        
-        override fun onResume() {
-            super.onResume()
-            watchdogHandler.postDelayed(watchdogRunnable, 20000)
-        }
-        
-        override fun onPause() {
-            super.onPause()
-            watchdogHandler.removeCallbacks(watchdogRunnable)
-        }
+private fun restartApp() {
+    val i = packageManager.getLaunchIntentForPackage(packageName)
+    i?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+    startActivity(i)
+    finish()
+}
 }
