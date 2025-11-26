@@ -6,7 +6,7 @@ import android.content.Intent
 import android.os.*
 import android.util.Log
 import android.provider.Settings
-import androidx.core.app.NotificationCompat   // ✔ FIX
+import androidx.core.app.NotificationCompat
 import android.content.pm.ServiceInfo
 
 class ForegroundService : Service() {
@@ -14,7 +14,6 @@ class ForegroundService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private val watchdogHandler = Handler(Looper.getMainLooper())
 
-    // ✔ Добавлены константы
     private val CHANNEL_ID = "kiosk_fg_channel"
     private val NOTIFICATION_ID = 1
 
@@ -22,6 +21,7 @@ class ForegroundService : Service() {
         super.onCreate()
         Log.d("FG_SERVICE", "ForegroundService created")
 
+        createChannel()
         requestBatteryWhitelist()
         acquireWakeLock()
         startAsForeground()
@@ -30,16 +30,21 @@ class ForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d("FG_SERVICE", "ForegroundService started")
+        Log.d("FG_SERVICE", "ForegroundService onStartCommand")
 
-        // Android 12+ защита — НО без указания типа (иначе SecurityException)
-        if (Build.VERSION.SDK_INT >= 31) {
+        // Android 12+ MUST specify foreground type
+        if (Build.VERSION.SDK_INT >= 29) {
             try {
                 startForeground(
                     NOTIFICATION_ID,
-                    buildNotification()
+                    buildNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
                 )
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.e("FG_SERVICE", "FG restart exception: ${e.message}")
+            }
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification())
         }
 
         return START_STICKY
@@ -49,8 +54,9 @@ class ForegroundService : Service() {
         super.onDestroy()
         Log.d("FG_SERVICE", "ForegroundService destroyed — restarting")
 
-        wakeLock?.release()
+        try { wakeLock?.release() } catch (_: Exception) {}
 
+        // Automatic restart
         try {
             val i = Intent(this, ForegroundService::class.java)
             startForegroundService(i)
@@ -59,15 +65,15 @@ class ForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    // ------------------------------------------------------------
-    // PARTIAL WAKELOCK — держит CPU 24/7
-    // ------------------------------------------------------------
+    // ================================================================
+    // WAKELOCK — держит CPU 24/7
+    // ================================================================
     private fun acquireWakeLock() {
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = pm.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
-                "kiosk:fg_partial_wakelock"
+                "kiosk:foreground_wl"
             )
             wakeLock?.setReferenceCounted(false)
             wakeLock?.acquire()
@@ -77,27 +83,10 @@ class ForegroundService : Service() {
         }
     }
 
-    // ------------------------------------------------------------
-    // SAFE FOREGROUND START
-    // ------------------------------------------------------------
-    private fun startAsForeground() {
-
-        // ✔ заменена иконка (твоя отсутствует)
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("360 Synergy Kiosk")
-            .setContentText("Running")
-            .setSmallIcon(android.R.drawable.stat_sys_warning)
-            .setOngoing(true)
-            .build()
-
-        startForeground(
-            NOTIFICATION_ID,
-            notification
-        )
-    }
-
-    private fun buildNotification(): Notification {
-
+    // ================================================================
+    // NOTIFICATION CHANNEL
+    // ================================================================
+    private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val chan = NotificationChannel(
                 CHANNEL_ID,
@@ -107,25 +96,47 @@ class ForegroundService : Service() {
             chan.setSound(null, null)
             chan.enableLights(false)
             chan.enableVibration(false)
-
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(chan)
         }
+    }
 
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL_ID)
-                .setContentTitle("")
-                .setContentText("")
-                .setSmallIcon(android.R.color.transparent)
-                .build()
+    // ================================================================
+    // FOREGROUND START (SAFE)
+    // ================================================================
+    private fun startAsForeground() {
+        val notification = buildNotification()
+
+        if (Build.VERSION.SDK_INT >= 29) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
         } else {
-            Notification()
+            startForeground(NOTIFICATION_ID, notification)
         }
     }
 
-    // ------------------------------------------------------------
+    private fun buildNotification(): Notification {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.color.transparent)
+                .setContentTitle("")
+                .setContentText("")
+                .build()
+        } else {
+            NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.color.transparent)
+                .setContentTitle("")
+                .setContentText("")
+                .build()
+        }
+    }
+
+    // ================================================================
     // BATTERY OPTIMIZATION WHITELIST
-    // ------------------------------------------------------------
+    // ================================================================
     private fun requestBatteryWhitelist() {
         try {
             val pm = getSystemService(PowerManager::class.java)
@@ -143,9 +154,9 @@ class ForegroundService : Service() {
         }
     }
 
-    // ------------------------------------------------------------
+    // ================================================================
     // WATCHDOG — держит сервис в живом состоянии
-    // ------------------------------------------------------------
+    // ================================================================
     private fun startWatchdog() {
         watchdogHandler.post(object : Runnable {
             override fun run() {
@@ -160,9 +171,9 @@ class ForegroundService : Service() {
         })
     }
 
-    // =====================================================================
-    // DAILY AUTO-RESTART — 03:00
-    // =====================================================================
+    // ================================================================
+    // DAILY RESTART — каждый день в 03:00
+    // ================================================================
     private fun startDailyRestartTimer() {
         val handler = Handler(mainLooper)
 
@@ -170,22 +181,22 @@ class ForegroundService : Service() {
             override fun run() {
                 val cal = java.util.Calendar.getInstance()
                 val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
-                val minute = cal.get(java.util.Calendar.MINUTE)
+                val min = cal.get(java.util.Calendar.MINUTE)
 
-                if (hour == 3 && minute <= 1) {
+                if (hour == 3 && min <= 1) {
                     Log.d("DAILY_RESTART", "Restarting app at 03:00")
                     restartApp()
                 }
 
-                handler.postDelayed(this, 60000)
+                handler.postDelayed(this, 60_000)
             }
         })
     }
 
     private fun restartApp() {
         val ctx = applicationContext
-        val i = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
-        i?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-        ctx.startActivity(i)
+        val launch = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
+        launch?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        ctx.startActivity(launch)
     }
 }
