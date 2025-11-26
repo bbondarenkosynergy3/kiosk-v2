@@ -223,24 +223,10 @@ class ForegroundService : Service() {
     }
 
 private fun applyScheduleState() {
-    val schedule = ScheduleManager.getScheduleForToday(this) ?: return
+    val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
 
-    val cal = java.util.Calendar.getInstance()
-    val h = cal.get(java.util.Calendar.HOUR_OF_DAY)
-    val m = cal.get(java.util.Calendar.MINUTE)
-    val nowMinutes = h * 60 + m
-
-    val sleepMinutes = schedule.sleepH * 60 + schedule.sleepM
-    val wakeMinutes = schedule.wakeH * 60 + schedule.wakeM
-
-    val shouldSleep =
-        if (sleepMinutes < wakeMinutes) {
-            // обычный режим
-            nowMinutes >= sleepMinutes || nowMinutes < wakeMinutes
-        } else {
-            // ночной переход через 00:00
-            nowMinutes >= sleepMinutes || nowMinutes < wakeMinutes
-        }
+    // ScheduleManager.applyTodayFromPrefs() уже посчитал это значение
+    val shouldSleep = prefs.getBoolean("schedule_should_sleep_now", false)
 
     if (shouldSleep && lastScheduleState != "sleep") {
         Log.d("SCHEDULE", "Auto-sleep triggered")
