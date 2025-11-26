@@ -330,8 +330,18 @@ class MainActivity : Activity() {
 
         webView = WebView(this)
         webView.settings.javaScriptEnabled = true
-        webView.settings.domStorageEnabled = true
-        webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
+        webView.settings.domStorageEnabled = false
+        webView.settings.setAppCacheEnabled(false)
+        webView.settings.cacheMode = WebSettings.LOAD_NO_CACHE
+        webView.settings.useWideViewPort = true
+        webView.settings.loadWithOverviewMode = true
+
+        // --- FULL CACHE CLEAR ---
+        try {
+            webView.clearCache(true)
+            webView.clearHistory()
+            WebStorage.getInstance().deleteAllData()
+        } catch (_: Exception) {}
 
         webView.webViewClient = object : WebViewClient() {
             override fun onReceivedError(
@@ -394,7 +404,7 @@ class MainActivity : Activity() {
             .addOnSuccessListener {
                 val url =
                     "https://360synergy.net/kiosk3/public/feedback.html?company=$company&id=$deviceId"
-                webView.loadUrl(url)
+                webView.loadUrl(url + "&v=" + System.currentTimeMillis())
             }
     }
 
@@ -478,7 +488,7 @@ class MainActivity : Activity() {
 
                 "reload" -> {
                     try {
-                        webView.reload()
+                        webView.loadUrl(webView.url + "&v=" + System.currentTimeMillis())
                     } catch (_: Exception) {
                     }
                     ack(cmdId, true, "reloaded")
@@ -503,7 +513,7 @@ class MainActivity : Activity() {
                         ?.get("url") as? String
                     if (url != null) {
                         try {
-                            webView.loadUrl(url)
+                            webView.loadUrl(url + "&v=" + System.currentTimeMillis())
                         } catch (_: Exception) {
                         }
                         ack(cmdId, true, "opened url")
