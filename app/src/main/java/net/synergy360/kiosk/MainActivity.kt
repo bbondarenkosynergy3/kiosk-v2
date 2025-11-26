@@ -306,6 +306,38 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
         }
 
+        // Load last url logic
+        val lastUrl = prefs.getString("last_url", null)
+        if (lastUrl != null) {
+            try {
+                webView.loadUrl(lastUrl)
+            } catch (_: Exception) {}
+        } else {
+            // Try to fetch from Firestore
+            deviceRef().get()
+                .addOnSuccessListener { snap ->
+                    val firestoreUrl = snap?.getString("lastUrl")
+                    if (firestoreUrl != null) {
+                        try {
+                            webView.loadUrl(firestoreUrl)
+                        } catch (_: Exception) {}
+                    } else {
+                        // fallback
+                        val url = "https://360synergy.net/kiosk3/public/feedback.html?company=${getCompany()}&id=$deviceId"
+                        try {
+                            webView.loadUrl(url)
+                        } catch (_: Exception) {}
+                    }
+                }
+                .addOnFailureListener {
+                    // fallback
+                    val url = "https://360synergy.net/kiosk3/public/feedback.html?company=${getCompany()}&id=$deviceId"
+                    try {
+                        webView.loadUrl(url)
+                    } catch (_: Exception) {}
+                }
+        }
+
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
                 registerDevice(token)
@@ -404,7 +436,9 @@ class MainActivity : Activity() {
             .addOnSuccessListener {
                 val url =
                     "https://360synergy.net/kiosk3/public/feedback.html?company=$company&id=$deviceId"
-                webView.loadUrl(url + "&v=" + System.currentTimeMillis())
+                val fullUrl = url + "&v=" + System.currentTimeMillis()
+                saveLastUrl(fullUrl)
+                webView.loadUrl(fullUrl)
             }
     }
 
@@ -488,7 +522,9 @@ class MainActivity : Activity() {
 
                 "reload" -> {
                     try {
-                        webView.loadUrl(webView.url + "&v=" + System.currentTimeMillis())
+                        val reloadUrl = webView.url + "&v=" + System.currentTimeMillis()
+                        webView.loadUrl(reloadUrl)
+                        saveLastUrl(reloadUrl)
                     } catch (_: Exception) {
                     }
                     ack(cmdId, true, "reloaded")
@@ -513,7 +549,9 @@ class MainActivity : Activity() {
                         ?.get("url") as? String
                     if (url != null) {
                         try {
-                            webView.loadUrl(url + "&v=" + System.currentTimeMillis())
+                            val fullUrl = url + "&v=" + System.currentTimeMillis()
+                            webView.loadUrl(fullUrl)
+                            saveLastUrl(fullUrl)
                         } catch (_: Exception) {
                         }
                         ack(cmdId, true, "opened url")
@@ -755,3 +793,14 @@ class MainActivity : Activity() {
         watchdogHandler.removeCallbacks(watchdogRunnable)
     }
 }
+
+    // Save last url to prefs and Firestore
+    private fun saveLastUrl(url: String) {
+        try {
+            prefs.edit().putString("last_url", url).apply()
+        } catch (_: Exception) {}
+        try {
+            val map = mapOf("lastUrl" to url)
+            deviceRef().set(map, SetOptions.merge())
+        } catch (_: Exception) {}
+    }
