@@ -38,52 +38,60 @@ class UpdateHelper(private val ctx: Context) {
             .addOnFailureListener { e -> Log.e("UPDATE_LOG", "Log fail: ${e.message}") }
     }
 
-    private fun registerUpdateReceiver() {
-        val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_MY_PACKAGE_REPLACED)
-            addAction(Intent.ACTION_PACKAGE_REPLACED)
-            addDataScheme("package")
+override fun onReceive(context: Context, intent: Intent) {
+    val receivedPkg = intent.data?.schemeSpecificPart ?: context.packageName
+
+    if (receivedPkg != context.packageName) return
+    if (rebootTriggered) return
+
+    rebootTriggered = true
+
+    log("apk_update_detected", mapOf(
+        "action" to intent.action,
+        "rawPackage" to receivedPkg
+    ))
+
+    GlobalScope.launch {
+        delay(1200)
+
+        val dpm = context.getSystemService(DevicePolicyManager::class.java)
+        val admin = ComponentName(context, MyDeviceAdminReceiver::class.java)
+
+        // 1) Попытка перезагрузки через Device Owner
+        try {
+            log("reboot_initiated")
+            dpm.reboot(admin)
+            return@launch
+        } catch (e: Exception) {
+            log("reboot_dpm_failed", mapOf("error" to e.message))
         }
 
-        ctx.registerReceiver(object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                val receivedPkg = intent.data?.schemeSpecificPart ?: context.packageName
+        // 2) Fallback reboot через shell
+        try {
+            log("reboot_fallback_exec")
+            Runtime.getRuntime().exec("reboot")
+            return@launch
+        } catch (e: Exception) {
+            log("reboot_fallback_failed", mapOf("error" to e.message))
+        }
 
-                if (receivedPkg != context.packageName) return
-                if (rebootTriggered) return
+        // 3) Если reboot недоступен — автозапуск приложения
+        try {
+            val launch = context.packageManager
+                .getLaunchIntentForPackage(context.packageName)
 
-                rebootTriggered = true
-
-                log("apk_update_detected", mapOf(
-                    "action" to intent.action,
-                    "rawPackage" to receivedPkg
-                ))
-
-                GlobalScope.launch {
-                    delay(1200)
-
-                    try {
-                        val dpm = context.getSystemService(DevicePolicyManager::class.java)
-                        val admin = ComponentName(context, MyDeviceAdminReceiver::class.java)
-
-                        log("reboot_initiated")
-                        dpm.reboot(admin)
-
-                    } catch (e: Exception) {
-                        log("reboot_dpm_failed", mapOf("error" to e.message))
-                        Log.e("UPDATE", "DO reboot failed: ${e.message}")
-
-                        try {
-                            log("reboot_fallback_exec")
-                            Runtime.getRuntime().exec("reboot")
-                        } catch (ee: Exception) {
-                            log("reboot_fallback_failed", mapOf("error" to ee.message))
-                            Log.e("UPDATE", "Fallback reboot failed: ${ee.message}")
-                        }
-                    }
-                }
+            if (launch != null) {
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                context.startActivity(launch)
+                log("autostart_after_update_success")
+            } else {
+                log("autostart_after_update_failed", mapOf("reason" to "no launch intent"))
             }
-        }, filter)
+        } catch (e: Exception) {
+            log("autostart_after_update_exception", mapOf("error" to e.message))
+        }
+    }
+}, filter)
     }
 
     fun startUpdate(url: String) {
