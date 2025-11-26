@@ -343,7 +343,6 @@ class MainActivity : Activity() {
                 Log.d("LOAD_URL", "Loaded fallback URL: $fallback")
             } catch (_: Exception) {}
         }
-        }
 
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
