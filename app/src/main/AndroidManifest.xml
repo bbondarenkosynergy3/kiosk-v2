@@ -1,14 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <!-- Foreground service permissions -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Убираем MEDIA_PLAYBACK (не нужно, может конфликтовать) -->
+
+    <!-- Device Admin -->
     <uses-permission
         android:name="android.permission.BIND_DEVICE_ADMIN"
         tools:ignore="ProtectedPermissions" />
@@ -18,12 +23,13 @@
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:resizeableActivity="false">
 
+        <!-- MAIN ACTIVITY -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:screenOrientation="sensorLandscape"
-            android:configChanges="orientation|keyboardHidden|screenSize"
-            android:launchMode="singleTop"
+            android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize"
+            android:launchMode="singleTask"
             android:hardwareAccelerated="true">
 
             <intent-filter>
@@ -32,6 +38,7 @@
             </intent-filter>
         </activity>
 
+        <!-- FIREBASE SERVICE -->
         <service
             android:name=".MyFirebaseService"
             android:exported="false">
@@ -40,11 +47,13 @@
             </intent-filter>
         </service>
 
+        <!-- FOREGROUND SERVICE ✓ FIXED -->
         <service
             android:name=".ForegroundService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse" />
 
+        <!-- DEVICE ADMIN RECEIVER -->
         <receiver
             android:name=".MyDeviceAdminReceiver"
             android:exported="true"
@@ -64,6 +73,7 @@
             </intent-filter>
         </receiver>
 
+        <!-- BOOT RECEIVER -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
@@ -73,6 +83,7 @@
             </intent-filter>
         </receiver>
 
+        <!-- SLEEP/WAKE -->
         <receiver
             android:name=".SleepWakeReceiver"
             android:enabled="true"
@@ -83,6 +94,7 @@
             </intent-filter>
         </receiver>
 
+        <!-- DAY SWITCH -->
         <receiver
             android:name=".DaySwitchReceiver"
             android:enabled="true"
