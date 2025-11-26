@@ -19,8 +19,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.messaging.FirebaseMessaging
-import java.util.UUID
 import org.json.JSONObject
+import java.util.UUID
 
 class MainActivity : Activity() {
 
@@ -49,6 +49,9 @@ class MainActivity : Activity() {
         Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
     }
 
+    // --------------------------------------------------------------------
+    // HEARTBEAT
+    // --------------------------------------------------------------------
     private val heartbeatHandler = Handler(Looper.getMainLooper())
     private val heartbeatRunnable = object : Runnable {
         override fun run() {
@@ -57,10 +60,50 @@ class MainActivity : Activity() {
         }
     }
 
-    // -------------------------------------------------------
-    //  New corner-tap gesture system
-    // -------------------------------------------------------
+    // --------------------------------------------------------------------
+    // WATCHDOG — контроль зависаний WebView
+    // --------------------------------------------------------------------
+    private val watchdogHandler = Handler(Looper.getMainLooper())
+    private var watchdogFails = 0
 
+    private val watchdogRunnable = object : Runnable {
+        override fun run() {
+            try {
+                webView.evaluateJavascript(
+                    "(function(){ return 'ping_' + Date.now(); })();"
+                ) { result ->
+                    if (result != null && result.contains("ping_")) {
+                        watchdogFails = 0
+                    } else {
+                        watchdogFails++
+                    }
+                }
+            } catch (_: Exception) {
+                watchdogFails++
+            }
+
+            // если WebView завис → reload
+            if (watchdogFails == 3) {
+                Log.e("WATCHDOG", "WebView freeze → reload()")
+                try {
+                    webView.reload()
+                } catch (_: Exception) {
+                }
+            }
+
+            // если WebView мёртв → рестарт Activity
+            if (watchdogFails >= 6) {
+                Log.e("WATCHDOG", "WebView DEAD → restartApp()")
+                restartApp()
+            }
+
+            watchdogHandler.postDelayed(this, 15_000L)
+        }
+    }
+
+    // -------------------------------------------------------
+    //  Corner-tap gesture system (верхний левый / нижний левый)
+    // -------------------------------------------------------
     private var tlCount = 0
     private var blCount = 0       // bottom-left taps for Exit
     private var tlLastTap = 0L
@@ -76,12 +119,13 @@ class MainActivity : Activity() {
         val now = SystemClock.uptimeMillis()
 
         when {
+            // top-left
             x < m && y < m -> {
                 if (now - tlLastTap < 1500) {
                     tlCount++
                     if (tlCount >= 4) {
                         tlCount = 0
-                        // Previously: startActivity(Intent(this, TestActivity::class.java))
+                        // сюда можно повесить скрытое меню/настройки
                         return
                     }
                 } else {
@@ -89,9 +133,8 @@ class MainActivity : Activity() {
                 }
                 tlLastTap = now
             }
-            // -----------------------------
-            //  🔴 Bottom-left corner → EXIT
-            // -----------------------------
+
+            // bottom-left → EXIT
             x < m && y > h - m -> {
                 if (now - blLastTap < 1500) {
                     blCount++
@@ -123,14 +166,19 @@ class MainActivity : Activity() {
                     "company" to getCompany()
                 )
             )
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
     }
 
     private fun startSettingsListener(company: String) {
+        // пока заглушка, чтобы не ломать твою архитектуру
     }
 
     private fun startScheduleListener(company: String) {
-        try { scheduleReg?.remove() } catch (_: Exception) {}
+        try {
+            scheduleReg?.remove()
+        } catch (_: Exception) {
+        }
 
         val ref = db.collection("company")
             .document(company)
@@ -163,39 +211,52 @@ class MainActivity : Activity() {
         }
     }
 
-
     private fun fetchCompany(callback: (String) -> Unit) {
         val ref = db.collection("deviceAssignments").document(androidId)
-        ref.get().addOnSuccessListener { snap ->
-            if (snap != null && snap.exists()) {
-                val company = snap.getString("company") ?: "synergy3"
-                val storedDeviceId = snap.getString("deviceId") ?: deviceId
-                prefs.edit().putString("company", company)
-                    .putString("device_id", storedDeviceId).apply()
-                callback(company)
-            } else {
-                val info = mapOf(
-                    "company" to "synergy3",
-                    "deviceId" to deviceId,
-                    "updatedAt" to System.currentTimeMillis()
-                )
-                ref.set(info, SetOptions.merge()).addOnSuccessListener {
-                    prefs.edit().putString("company", "synergy3")
-                        .putString("device_id", deviceId).apply()
-                    callback("synergy3")
+        ref.get()
+            .addOnSuccessListener { snap ->
+                if (snap != null && snap.exists()) {
+                    val company = snap.getString("company") ?: "synergy3"
+                    val storedDeviceId = snap.getString("deviceId") ?: deviceId
+                    prefs.edit().putString("company", company)
+                        .putString("device_id", storedDeviceId)
+                        .apply()
+                    callback(company)
+                } else {
+                    val info = mapOf(
+                        "company" to "synergy3",
+                        "deviceId" to deviceId,
+                        "updatedAt" to System.currentTimeMillis()
+                    )
+                    ref.set(info, SetOptions.merge())
+                        .addOnSuccessListener {
+                            prefs.edit().putString("company", "synergy3")
+                                .putString("device_id", deviceId)
+                                .apply()
+                            callback("synergy3")
+                        }
+                        .addOnFailureListener {
+                            callback("synergy3")
+                        }
                 }
             }
-        }.addOnFailureListener { callback("synergy3") }
+            .addOnFailureListener {
+                callback("synergy3")
+            }
     }
 
+    // -------------------------------------------------------
+    // LIFECYCLE
     // -------------------------------------------------------
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        try { FirebaseApp.initializeApp(this) } catch (_: Exception) {}
+        try {
+            FirebaseApp.initializeApp(this)
+        } catch (_: Exception) {
+        }
 
-        fetchCompany { continueStartup() }
-
+        // UI / immersive
         window.decorView.systemUiVisibility =
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
                     View.SYSTEM_UI_FLAG_FULLSCREEN or
@@ -206,13 +267,13 @@ class MainActivity : Activity() {
         root = FrameLayout(this)
         setContentView(root)
 
-        // admin gesture layer (overlay)
+        // overlay для corner-tap
         touchLayer = object : View(this) {
             override fun onTouchEvent(e: MotionEvent?): Boolean {
                 if (e?.action == MotionEvent.ACTION_DOWN) {
                     handleCornerTap(e.x, e.y)
                 }
-                // не перехватываем событие, чтобы WebView продолжал работать
+                // не перехватываем, чтобы WebView продолжал получать события
                 return false
             }
         }
@@ -224,6 +285,9 @@ class MainActivity : Activity() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
+
+        // после инициализации UI — тянем company из Firestore
+        fetchCompany { continueStartup() }
     }
 
     private fun continueStartup() {
@@ -231,17 +295,17 @@ class MainActivity : Activity() {
         startSettingsListener(getCompany())
         startScheduleListener(getCompany())
 
-        // 🔥 Автозапуск фонового сервиса
+        // автозапуск ForegroundService
         try {
             val s = Intent(this, ForegroundService::class.java)
-        
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(s)
             } else {
                 startService(s)
             }
-        } catch (_: Exception) {}
-        
+        } catch (_: Exception) {
+        }
+
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
                 registerDevice(token)
@@ -258,7 +322,10 @@ class MainActivity : Activity() {
         if (webViewInitialized) return
 
         if (Build.VERSION.SDK_INT >= 28) {
-            try { WebView.setDataDirectorySuffix("kiosk") } catch (_: Exception) {}
+            try {
+                WebView.setDataDirectorySuffix("kiosk")
+            } catch (_: Exception) {
+            }
         }
 
         webView = WebView(this)
@@ -280,10 +347,12 @@ class MainActivity : Activity() {
                     Handler(Looper.getMainLooper()).postDelayed({
                         try {
                             view.reload()
-                        } catch (_: Exception) {}
+                        } catch (_: Exception) {
+                        }
                     }, 3_000L)
                 }
             }
+
             override fun onPageFinished(v: WebView?, url: String?) {
                 hideOffline()
             }
@@ -297,7 +366,7 @@ class MainActivity : Activity() {
             )
         )
 
-        // важный момент — жестовый слой всегда поверх WebView
+        // слой жестов всегда поверх WebView
         touchLayer?.bringToFront()
 
         webViewInitialized = true
@@ -359,11 +428,18 @@ class MainActivity : Activity() {
             .setTitle("Exit kiosk?")
             .setMessage("Leave fullscreen and close app?")
             .setPositiveButton("Yes") { _, _ ->
-                try { stopLockTask() } catch (_: Exception) {}
+                try {
+                    stopLockTask()
+                } catch (_: Exception) {
+                }
                 finish()
-            }.setNegativeButton("No", null).show()
+            }
+            .setNegativeButton("No", null)
+            .show()
     }
 
+    // -------------------------------------------------------
+    // Firestore командный список
     // -------------------------------------------------------
     private fun startCommandListener() {
         commandReg = deviceRef().addSnapshotListener { snap, e ->
@@ -394,13 +470,17 @@ class MainActivity : Activity() {
                     val admin = ComponentName(this, MyDeviceAdminReceiver::class.java)
                     try {
                         dpm.setKeyguardDisabled(admin, true)
-                    } catch (_: Exception) {}
+                    } catch (_: Exception) {
+                    }
                     wakeDevice()
                     ack(cmdId, true, "woken")
                 }
 
                 "reload" -> {
-                    try { webView.reload() } catch (_: Exception) {}
+                    try {
+                        webView.reload()
+                    } catch (_: Exception) {
+                    }
                     ack(cmdId, true, "reloaded")
                 }
 
@@ -422,7 +502,10 @@ class MainActivity : Activity() {
                         ?.let { it as? Map<*, *> }
                         ?.get("url") as? String
                     if (url != null) {
-                        try { webView.loadUrl(url) } catch (_: Exception) {}
+                        try {
+                            webView.loadUrl(url)
+                        } catch (_: Exception) {
+                        }
                         ack(cmdId, true, "opened url")
                     } else {
                         ack(cmdId, false, "missing url")
@@ -454,22 +537,34 @@ class MainActivity : Activity() {
 
                                     prefs.edit().putString("company", newCompany).apply()
 
-                                    try { settingsReg?.remove() } catch (_: Exception) {}
+                                    try {
+                                        settingsReg?.remove()
+                                    } catch (_: Exception) {
+                                    }
                                     settingsReg = null
                                     startSettingsListener(newCompany)
 
-                                    try { scheduleReg?.remove() } catch (_: Exception) {}
+                                    try {
+                                        scheduleReg?.remove()
+                                    } catch (_: Exception) {
+                                    }
                                     scheduleReg = null
                                     startScheduleListener(newCompany)
 
-                                    try { commandReg?.remove() } catch (_: Exception) {}
+                                    try {
+                                        commandReg?.remove()
+                                    } catch (_: Exception) {
+                                    }
                                     commandReg = null
 
                                     startCommandListener()
 
                                     val url =
                                         "https://360synergy.net/kiosk3/public/feedback.html?company=$newCompany&id=$deviceId"
-                                    try { webView.loadUrl(url) } catch (_: Exception) {}
+                                    try {
+                                        webView.loadUrl(url)
+                                    } catch (_: Exception) {
+                                    }
 
                                     ack(cmdId, true, "company switched")
                                 }
@@ -510,7 +605,8 @@ class MainActivity : Activity() {
             )
             wl.acquire(3000)
             wl.release()
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
     }
 
     private fun sendHeartbeat() {
@@ -522,18 +618,29 @@ class MainActivity : Activity() {
         deviceRef().set(data, SetOptions.merge())
     }
 
-
     private fun enableKiosk() {
         val dpm = getSystemService(DevicePolicyManager::class.java)
         val admin = ComponentName(this, MyDeviceAdminReceiver::class.java)
 
         if (dpm.isDeviceOwnerApp(packageName)) {
-            try { dpm.setStatusBarDisabled(admin, true) } catch (_: Exception) {}
-            try { dpm.setLockTaskPackages(admin, arrayOf(packageName)) } catch (_: Exception) {}
-            try { startLockTask() } catch (_: Exception) {}
+            try {
+                dpm.setStatusBarDisabled(admin, true)
+            } catch (_: Exception) {
+            }
+            try {
+                dpm.setLockTaskPackages(admin, arrayOf(packageName))
+            } catch (_: Exception) {
+            }
+            try {
+                startLockTask()
+            } catch (_: Exception) {
+            }
         }
     }
 
+    // -------------------------------------------------------
+    // UI / системные события
+    // -------------------------------------------------------
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
@@ -543,6 +650,7 @@ class MainActivity : Activity() {
                         View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
         }
     }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (prefs.getBoolean("volumeLocked", false)) {
             val code = event.keyCode
@@ -554,99 +662,86 @@ class MainActivity : Activity() {
     }
 
     // =====================================================================
-//  ANTI-TAMPER — запрет выхода из киоска
-// =====================================================================
-override fun onUserLeaveHint() {
-    super.onUserLeaveHint()
-    Log.d("ANTI_TAMPER", "HOME/RECENTS pressed → restoring MainActivity")
+    //  ANTI-TAMPER — запрет выхода из киоска
+    // =====================================================================
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        Log.d("ANTI_TAMPER", "HOME/RECENTS pressed → restoring MainActivity")
 
-    Handler(Looper.getMainLooper()).postDelayed({
-        val i = Intent(this, MainActivity::class.java)
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        startActivity(i)
-    }, 300)
-}
-
-// Полная блокировка кнопки BACK
-override fun onBackPressed() {
-    // блокируем кнопку назад
-}
-
-// =====================================================================
-//  ОБЪЕДИНЁННЫЙ onResume()
-// =====================================================================
-override fun onResume() {
-    super.onResume()
-
-    // восстановление киоска
-    window.decorView.systemUiVisibility =
-        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_FULLSCREEN
-
-    // heartbeat
-    heartbeatHandler.post(heartbeatRunnable)
-
-    // kiosk mode
-    enableKiosk()
-
-    // watchdog
-    watchdogHandler.postDelayed(watchdogRunnable, 20000)
-}
-
-// =====================================================================
-//  ОБЪЕДИНЁННЫЙ onPause()
-// =====================================================================
-override fun onPause() {
-    super.onPause()
-
-    // heartbeat
-    heartbeatHandler.removeCallbacks(heartbeatRunnable)
-
-    // watchdog
-    watchdogHandler.removeCallbacks(watchdogRunnable)
-}
-
-// =====================================================================
-//  WATCHDOG — проверка зависания WebView
-// =====================================================================
-private val watchdogHandler = Handler(Looper.getMainLooper())
-private var watchdogFails = 0
-
-private val watchdogRunnable = object : Runnable {
-    override fun run() {
-        try {
-            webView.evaluateJavascript("(function(){ return 'ping_' + Date.now(); })();") { result ->
-                if (result != null && result.contains("ping_")) {
-                    watchdogFails = 0
-                } else {
-                    watchdogFails++
-                }
-            }
-        } catch (_: Exception) {
-            watchdogFails++
-        }
-
-        // если WebView завис → reload
-        if (watchdogFails == 3) {
-            Log.e("WATCHDOG", "WebView freeze → reload()")
-            try { webView.reload() } catch (_: Exception) {}
-        }
-
-        // если WebView мёртв → рестарт Activity
-        if (watchdogFails >= 6) {
-            Log.e("WATCHDOG", "WebView DEAD → restartApp()")
-            restartApp()
-        }
-
-        watchdogHandler.postDelayed(this, 15000)
+        Handler(Looper.getMainLooper()).postDelayed({
+            val i = Intent(this, MainActivity::class.java)
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            startActivity(i)
+        }, 300)
     }
-}
 
-private fun restartApp() {
-    val i = packageManager.getLaunchIntentForPackage(packageName)
-    i?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-    startActivity(i)
-    finish()
-}
+    // Полная блокировка кнопки BACK
+    override fun onBackPressed() {
+        // блокируем кнопку назад
+    }
+
+    // =====================================================================
+    //  ОБЪЕДИНЁННЫЙ onResume()
+    // =====================================================================
+    override fun onResume() {
+        super.onResume()
+
+        // восстановление киоска / full-screen
+        window.decorView.systemUiVisibility =
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_FULLSCREEN
+
+        // heartbeat
+        heartbeatHandler.post(heartbeatRunnable)
+
+        // kiosk mode
+        enableKiosk()
+
+        // watchdog
+        watchdogHandler.postDelayed(watchdogRunnable, 20_000L)
+    }
+
+    // =====================================================================
+    //  ОБЪЕДИНЁННЫЙ onPause()
+    // =====================================================================
+    override fun onPause() {
+        super.onPause()
+
+        // heartbeat
+        heartbeatHandler.removeCallbacks(heartbeatRunnable)
+
+        // watchdog
+        watchdogHandler.removeCallbacks(watchdogRunnable)
+    }
+
+    // =====================================================================
+    //  Рестарт приложения (для WATCHDOG)
+    // =====================================================================
+    private fun restartApp() {
+        val i = packageManager.getLaunchIntentForPackage(packageName)
+        i?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(i)
+        finish()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+
+        try {
+            commandReg?.remove()
+        } catch (_: Exception) {
+        }
+        try {
+            settingsReg?.remove()
+        } catch (_: Exception) {
+        }
+        try {
+            scheduleReg?.remove()
+        } catch (_: Exception) {
+        }
+
+        heartbeatHandler.removeCallbacks(heartbeatRunnable)
+        watchdogHandler.removeCallbacks(watchdogRunnable)
+    }
 }
