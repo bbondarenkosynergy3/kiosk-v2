@@ -363,7 +363,6 @@ class MainActivity : Activity() {
         webView = WebView(this)
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = false
-        webView.settings.setAppCacheEnabled(false)
         webView.settings.cacheMode = WebSettings.LOAD_NO_CACHE
         webView.settings.useWideViewPort = true
         webView.settings.loadWithOverviewMode = true
@@ -792,8 +791,6 @@ class MainActivity : Activity() {
         heartbeatHandler.removeCallbacks(heartbeatRunnable)
         watchdogHandler.removeCallbacks(watchdogRunnable)
     }
-}
-
     // Save last url to prefs and Firestore
     private fun saveLastUrl(url: String) {
         try {
