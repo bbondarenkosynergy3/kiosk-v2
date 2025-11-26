@@ -9,7 +9,9 @@ import android.content.Intent
 import android.os.*
 import android.util.Log
 import android.provider.Settings
+import android.app.admin.DevicePolicyManager
 import androidx.core.app.NotificationCompat
+import com.google.firebase.firestore.FirebaseFirestore
 
 class ForegroundService : Service() {
 
@@ -25,22 +27,31 @@ class ForegroundService : Service() {
     private val watchdogHandler = Handler(Looper.getMainLooper())
     private val restartHandler = Handler(Looper.getMainLooper())
 
+    // -------------------------
+    // 🔵 SCHEDULE ENGINE
+    // -------------------------
+    private val scheduleHandler = Handler(Looper.getMainLooper())
+    private var lastScheduleState: String = "unknown" // "sleep" / "awake"
+
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "onCreate")
 
-        // 1) foreground сразу – САМЫЙ ВАЖНЫЙ МОМЕНТ
+        // 1) foreground сразу
         startForeground(NOTIFICATION_ID, buildNotification())
 
         // 2) WakeLock
         acquireWakeLock()
 
-        // 3) Безопасный whitelist
+        // 3) battery optimizations
         requestBatteryWhitelistSafe()
 
-        // 4) Таймеры
+        // 4) Timers
         startWatchdog()
         startDailyRestartTimer()
+
+        // 5) Авто-сон / авто-wake
+        startScheduleChecker()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -54,6 +65,7 @@ class ForegroundService : Service() {
 
         watchdogHandler.removeCallbacksAndMessages(null)
         restartHandler.removeCallbacksAndMessages(null)
+        scheduleHandler.removeCallbacksAndMessages(null)
 
         try {
             wakeLock?.let { if (it.isHeld) it.release() }
@@ -131,7 +143,6 @@ class ForegroundService : Service() {
             val pm = getSystemService(PowerManager::class.java)
             if (pm != null && !pm.isIgnoringBatteryOptimizations(packageName)) {
 
-                // Запросим whitelist только если Activity запущена
                 Handler(Looper.getMainLooper()).postDelayed({
                     try {
                         val intent = Intent(
@@ -146,7 +157,7 @@ class ForegroundService : Service() {
     }
 
     // -------------------------------------------------------------
-    // WATCHDOG — отслеживание зависаний Activity/WebView
+    // WATCHDOG
     // -------------------------------------------------------------
     private fun startWatchdog() {
         watchdogHandler.post(object : Runnable {
@@ -157,8 +168,6 @@ class ForegroundService : Service() {
                 if (!alive) {
                     Log.e(TAG, "Watchdog: activity dead → restarting app")
                     restartApp()
-                } else {
-                    Log.d(TAG, "Watchdog OK")
                 }
 
                 watchdogHandler.postDelayed(this, 2 * 60_000L)
@@ -195,6 +204,107 @@ class ForegroundService : Service() {
         })
     }
 
+    // -------------------------------------------------------------
+    // 🔵 SCHEDULE — CHECKER
+    // -------------------------------------------------------------
+    private fun startScheduleChecker() {
+        scheduleHandler.post(object : Runnable {
+            override fun run() {
+
+                try {
+                    applyScheduleState()
+                } catch (e: Exception) {
+                    Log.e("SCHEDULE", "Schedule error: ${e.message}")
+                }
+
+                scheduleHandler.postDelayed(this, 60_000L)
+            }
+        })
+    }
+
+    private fun applyScheduleState() {
+        val schedule = ScheduleManager.getScheduleForToday(this) ?: return
+
+        val cal = java.util.Calendar.getInstance()
+        val h = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        val m = cal.get(java.util.Calendar.MINUTE)
+        val nowMinutes = h * 60 + m
+
+        val sleepMinutes = schedule.sleepH * 60 + schedule.sleepM
+        val wakeMinutes = schedule.wakeH * 60 + schedule.wakeM
+
+        val shouldSleep = if (sleepMinutes < wakeMinutes) {
+            nowMinutes >= sleepMinutes || nowMinutes < wakeMinutes
+        } else {
+            nowMinutes in sleepMinutes until wakeMinutes
+        }
+
+        // Сон
+        if (shouldSleep && lastScheduleState != "sleep") {
+            Log.d("SCHEDULE", "Auto-sleep triggered")
+            autoSleep()
+            logSchedule("schedule_auto_sleep", "Device slept by schedule")
+            lastScheduleState = "sleep"
+        }
+
+        // Пробуждение
+        if (!shouldSleep && lastScheduleState != "awake") {
+            Log.d("SCHEDULE", "Auto-wake triggered")
+            autoWake()
+            logSchedule("schedule_auto_wake", "Device woken by schedule")
+            lastScheduleState = "awake"
+        }
+    }
+
+    private fun autoSleep() {
+        try {
+            val dpm = getSystemService(DevicePolicyManager::class.java)
+            val admin = android.content.ComponentName(this, MyDeviceAdminReceiver::class.java)
+
+            if (dpm.isDeviceOwnerApp(packageName)) {
+                dpm.lockNow()
+            }
+        } catch (e: Exception) {
+            Log.e("SCHEDULE", "autoSleep error: ${e.message}")
+        }
+    }
+
+    private fun autoWake() {
+        try {
+            val pm = getSystemService(PowerManager::class.java)
+            @Suppress("DEPRECATION")
+            val wl = pm.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "kiosk:auto_wake"
+            )
+            wl.acquire(3000)
+            wl.release()
+        } catch (e: Exception) {
+            Log.e("SCHEDULE", "autoWake error: ${e.message}")
+        }
+    }
+
+    private fun logSchedule(event: String, msg: String) {
+        try {
+            val prefs = getSharedPreferences("kiosk_prefs", MODE_PRIVATE)
+            val deviceId = prefs.getString("device_id", "unknown")
+            val company = prefs.getString("company", "unknown")
+
+            val data = mapOf(
+                "event" to event,
+                "message" to msg,
+                "timestamp" to System.currentTimeMillis(),
+                "deviceId" to deviceId,
+                "company" to company
+            )
+
+            FirebaseFirestore.getInstance()
+                .collection("scheduleEvents")
+                .add(data)
+        } catch (_: Exception) {}
+    }
+
+    // -------------------------------------------------------------
     private fun restartSelf() {
         try {
             val i = Intent(this, ForegroundService::class.java)
