@@ -801,3 +801,4 @@ class MainActivity : Activity() {
             deviceRef().set(map, SetOptions.merge())
         } catch (_: Exception) {}
     }
+}
