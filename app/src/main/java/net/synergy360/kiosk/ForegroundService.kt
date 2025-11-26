@@ -222,39 +222,40 @@ class ForegroundService : Service() {
         })
     }
 
-    private fun applyScheduleState() {
-        val schedule = ScheduleManager.getScheduleForToday(this) ?: return
+private fun applyScheduleState() {
+    val schedule = ScheduleManager.getScheduleForToday(this) ?: return
 
-        val cal = java.util.Calendar.getInstance()
-        val h = cal.get(java.util.Calendar.HOUR_OF_DAY)
-        val m = cal.get(java.util.Calendar.MINUTE)
-        val nowMinutes = h * 60 + m
+    val cal = java.util.Calendar.getInstance()
+    val h = cal.get(java.util.Calendar.HOUR_OF_DAY)
+    val m = cal.get(java.util.Calendar.MINUTE)
+    val nowMinutes = h * 60 + m
 
-        val sleepMinutes = schedule.sleepH * 60 + schedule.sleepM
-        val wakeMinutes = schedule.wakeH * 60 + schedule.wakeM
+    val sleepMinutes = schedule.sleepH * 60 + schedule.sleepM
+    val wakeMinutes = schedule.wakeH * 60 + schedule.wakeM
 
-        val shouldSleep = if (sleepMinutes < wakeMinutes) {
+    val shouldSleep =
+        if (sleepMinutes < wakeMinutes) {
+            // обычный режим
             nowMinutes >= sleepMinutes || nowMinutes < wakeMinutes
         } else {
-            nowMinutes in sleepMinutes until wakeMinutes
+            // ночной переход через 00:00
+            nowMinutes >= sleepMinutes || nowMinutes < wakeMinutes
         }
 
-        // Сон
-        if (shouldSleep && lastScheduleState != "sleep") {
-            Log.d("SCHEDULE", "Auto-sleep triggered")
-            autoSleep()
-            logSchedule("schedule_auto_sleep", "Device slept by schedule")
-            lastScheduleState = "sleep"
-        }
-
-        // Пробуждение
-        if (!shouldSleep && lastScheduleState != "awake") {
-            Log.d("SCHEDULE", "Auto-wake triggered")
-            autoWake()
-            logSchedule("schedule_auto_wake", "Device woken by schedule")
-            lastScheduleState = "awake"
-        }
+    if (shouldSleep && lastScheduleState != "sleep") {
+        Log.d("SCHEDULE", "Auto-sleep triggered")
+        autoSleep()
+        logSchedule("schedule_auto_sleep", "Device slept by schedule")
+        lastScheduleState = "sleep"
     }
+
+    if (!shouldSleep && lastScheduleState != "awake") {
+        Log.d("SCHEDULE", "Auto-wake triggered")
+        autoWake()
+        logSchedule("schedule_auto_wake", "Device woken by schedule")
+        lastScheduleState = "awake"
+    }
+}
 
     private fun autoSleep() {
         try {
