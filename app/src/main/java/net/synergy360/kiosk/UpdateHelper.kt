@@ -24,12 +24,16 @@ class UpdateHelper(private val ctx: Context) {
         registerUpdateReceiver()
     }
 
+    // -------------------------------------------------------
+    // Logging helper
+    // -------------------------------------------------------
     private fun log(status: String, extra: Map<String, Any?> = emptyMap()) {
         val data = mutableMapOf<String, Any?>(
             "status" to status,
             "timestamp" to System.currentTimeMillis(),
             "device" to android.os.Build.MODEL,
-            "build" to android.os.Build.DISPLAY
+            "build" to android.os.Build.DISPLAY,
+            "package" to ctx.packageName
         )
         data.putAll(extra)
 
@@ -38,62 +42,80 @@ class UpdateHelper(private val ctx: Context) {
             .addOnFailureListener { e -> Log.e("UPDATE_LOG", "Log fail: ${e.message}") }
     }
 
-override fun onReceive(context: Context, intent: Intent) {
-    val receivedPkg = intent.data?.schemeSpecificPart ?: context.packageName
-
-    if (receivedPkg != context.packageName) return
-    if (rebootTriggered) return
-
-    rebootTriggered = true
-
-    log("apk_update_detected", mapOf(
-        "action" to intent.action,
-        "rawPackage" to receivedPkg
-    ))
-
-    GlobalScope.launch {
-        delay(1200)
-
-        val dpm = context.getSystemService(DevicePolicyManager::class.java)
-        val admin = ComponentName(context, MyDeviceAdminReceiver::class.java)
-
-        // 1) Попытка перезагрузки через Device Owner
-        try {
-            log("reboot_initiated")
-            dpm.reboot(admin)
-            return@launch
-        } catch (e: Exception) {
-            log("reboot_dpm_failed", mapOf("error" to e.message))
+    // -------------------------------------------------------
+    // Register receiver that detects "APK updated" event
+    // -------------------------------------------------------
+    private fun registerUpdateReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_MY_PACKAGE_REPLACED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
         }
 
-        // 2) Fallback reboot через shell
-        try {
-            log("reboot_fallback_exec")
-            Runtime.getRuntime().exec("reboot")
-            return@launch
-        } catch (e: Exception) {
-            log("reboot_fallback_failed", mapOf("error" to e.message))
-        }
+        ctx.registerReceiver(object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
 
-        // 3) Если reboot недоступен — автозапуск приложения
-        try {
-            val launch = context.packageManager
-                .getLaunchIntentForPackage(context.packageName)
+                val receivedPkg = intent.data?.schemeSpecificPart ?: context.packageName
+                if (receivedPkg != context.packageName) return
+                if (rebootTriggered) return
 
-            if (launch != null) {
-                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                context.startActivity(launch)
-                log("autostart_after_update_success")
-            } else {
-                log("autostart_after_update_failed", mapOf("reason" to "no launch intent"))
+                rebootTriggered = true
+
+                log("apk_update_detected",
+                    mapOf(
+                        "action" to intent.action,
+                        "rawPackage" to receivedPkg
+                    )
+                )
+
+                GlobalScope.launch {
+                    delay(1200)
+
+                    val dpm = context.getSystemService(DevicePolicyManager::class.java)
+                    val admin = ComponentName(context, MyDeviceAdminReceiver::class.java)
+
+                    // 1) Attempt Device Owner reboot
+                    try {
+                        log("reboot_initiated")
+                        dpm.reboot(admin)
+                        return@launch
+                    } catch (e: Exception) {
+                        log("reboot_dpm_failed", mapOf("error" to e.message))
+                    }
+
+                    // 2) Fallback shell reboot
+                    try {
+                        log("reboot_fallback_exec")
+                        Runtime.getRuntime().exec("reboot")
+                        return@launch
+                    } catch (e: Exception) {
+                        log("reboot_fallback_failed", mapOf("error" to e.message))
+                    }
+
+                    // 3) Fallback autostart
+                    try {
+                        val launch = context.packageManager
+                            .getLaunchIntentForPackage(context.packageName)
+
+                        if (launch != null) {
+                            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                            context.startActivity(launch)
+                            log("autostart_after_update_success")
+                        } else {
+                            log("autostart_after_update_failed",
+                                mapOf("reason" to "no launch intent"))
+                        }
+                    } catch (e: Exception) {
+                        log("autostart_after_update_exception", mapOf("error" to e.message))
+                    }
+                }
             }
-        } catch (e: Exception) {
-            log("autostart_after_update_exception", mapOf("error" to e.message))
-        }
-    }
-}, filter)
+        }, filter)
     }
 
+    // -------------------------------------------------------
+    // Start APK update
+    // -------------------------------------------------------
     fun startUpdate(url: String) {
         Thread {
             try {
@@ -101,6 +123,7 @@ override fun onReceive(context: Context, intent: Intent) {
 
                 val file = java.io.File(ctx.cacheDir, "update.apk")
 
+                // 1) download APK
                 try {
                     java.net.URL(url).openStream().use { input ->
                         java.io.FileOutputStream(file).use { output ->
@@ -113,6 +136,7 @@ override fun onReceive(context: Context, intent: Intent) {
                     throw e
                 }
 
+                // 2) begin install
                 val installer = ctx.packageManager.packageInstaller
                 val params = android.content.pm.PackageInstaller.SessionParams(
                     android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL
@@ -135,7 +159,9 @@ override fun onReceive(context: Context, intent: Intent) {
                 }
 
                 val pending = PendingIntent.getActivity(
-                    ctx, 0, Intent(ctx, MainActivity::class.java),
+                    ctx,
+                    0,
+                    Intent(ctx, MainActivity::class.java),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
                 )
 
