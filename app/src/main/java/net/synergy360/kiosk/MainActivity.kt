@@ -307,18 +307,22 @@ class MainActivity : Activity() {
         }
 
         // -----------------------------
-        // Load last URL — PREFS FIRST
+        // Load last URL — PREFS-FIRST, FIRESTORE-ASYNC
         // -----------------------------
         val localUrl = prefs.getString("last_url", null)
 
+        var loaded = false
+
+        // 1) Load from prefs immediately
         if (localUrl != null) {
             try {
                 webView.loadUrl(localUrl)
                 Log.d("LOAD_URL", "Loaded from prefs: $localUrl")
+                loaded = true
             } catch (_: Exception) {}
         }
 
-        // Always try Firestore ASYNC but do not block startup
+        // 2) Load from Firestore (ASYNC — does NOT override immediately)
         deviceRef().get()
             .addOnSuccessListener { snap ->
                 val cloudUrl = snap?.getString("lastUrl")
@@ -334,8 +338,8 @@ class MainActivity : Activity() {
                 Log.e("LOAD_URL", "Firestore lastUrl load failed")
             }
 
-        // Fallback only if nothing loaded at all
-        if (localUrl == null) {
+        // 3) Fallback ONLY if nothing loaded at all
+        if (!loaded) {
             val fallback = "https://360synergy.net/kiosk3/public/feedback.html?company=${getCompany()}&id=$deviceId&v=${System.currentTimeMillis()}"
             try {
                 webView.loadUrl(fallback)
