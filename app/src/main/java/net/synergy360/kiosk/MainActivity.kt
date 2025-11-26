@@ -306,36 +306,43 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
         }
 
-        // Load last url logic
-        val lastUrl = prefs.getString("last_url", null)
-        if (lastUrl != null) {
+        // -----------------------------
+        // Load last URL — PREFS FIRST
+        // -----------------------------
+        val localUrl = prefs.getString("last_url", null)
+
+        if (localUrl != null) {
             try {
-                webView.loadUrl(lastUrl)
+                webView.loadUrl(localUrl)
+                Log.d("LOAD_URL", "Loaded from prefs: $localUrl")
             } catch (_: Exception) {}
-        } else {
-            // Try to fetch from Firestore
-            deviceRef().get()
-                .addOnSuccessListener { snap ->
-                    val firestoreUrl = snap?.getString("lastUrl")
-                    if (firestoreUrl != null) {
-                        try {
-                            webView.loadUrl(firestoreUrl)
-                        } catch (_: Exception) {}
-                    } else {
-                        // fallback
-                        val url = "https://360synergy.net/kiosk3/public/feedback.html?company=${getCompany()}&id=$deviceId"
-                        try {
-                            webView.loadUrl(url)
-                        } catch (_: Exception) {}
-                    }
-                }
-                .addOnFailureListener {
-                    // fallback
-                    val url = "https://360synergy.net/kiosk3/public/feedback.html?company=${getCompany()}&id=$deviceId"
+        }
+
+        // Always try Firestore ASYNC but do not block startup
+        deviceRef().get()
+            .addOnSuccessListener { snap ->
+                val cloudUrl = snap?.getString("lastUrl")
+                if (cloudUrl != null && cloudUrl != localUrl) {
                     try {
-                        webView.loadUrl(url)
+                        webView.loadUrl(cloudUrl)
+                        saveLastUrl(cloudUrl)
+                        Log.d("LOAD_URL", "Loaded from Firestore: $cloudUrl")
                     } catch (_: Exception) {}
                 }
+            }
+            .addOnFailureListener {
+                Log.e("LOAD_URL", "Firestore lastUrl load failed")
+            }
+
+        // Fallback only if nothing loaded at all
+        if (localUrl == null) {
+            val fallback = "https://360synergy.net/kiosk3/public/feedback.html?company=${getCompany()}&id=$deviceId&v=${System.currentTimeMillis()}"
+            try {
+                webView.loadUrl(fallback)
+                saveLastUrl(fallback)
+                Log.d("LOAD_URL", "Loaded fallback URL: $fallback")
+            } catch (_: Exception) {}
+        }
         }
 
         FirebaseMessaging.getInstance().token
