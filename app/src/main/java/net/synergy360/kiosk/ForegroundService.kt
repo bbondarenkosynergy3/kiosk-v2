@@ -5,13 +5,18 @@ import android.content.Context
 import android.content.Intent
 import android.os.*
 import android.util.Log
-import android.content.pm.ServiceInfo
 import android.provider.Settings
+import androidx.core.app.NotificationCompat   // ✔ FIX
+import android.content.pm.ServiceInfo
 
 class ForegroundService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
     private val watchdogHandler = Handler(Looper.getMainLooper())
+
+    // ✔ Добавлены константы
+    private val CHANNEL_ID = "kiosk_fg_channel"
+    private val NOTIFICATION_ID = 1
 
     override fun onCreate() {
         super.onCreate()
@@ -24,21 +29,21 @@ class ForegroundService : Service() {
         startWatchdog()
     }
 
-        override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-            Log.d("FG_SERVICE", "ForegroundService started")
-        
-            // Android 12+ защита — НО без указания типа!
-            if (Build.VERSION.SDK_INT >= 31) {
-                try {
-                    startForeground(
-                        1,
-                        buildNotification()
-                    )
-                } catch (_: Exception) {}
-            }
-        
-            return START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d("FG_SERVICE", "ForegroundService started")
+
+        // Android 12+ защита — НО без указания типа (иначе SecurityException)
+        if (Build.VERSION.SDK_INT >= 31) {
+            try {
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildNotification()
+                )
+            } catch (_: Exception) {}
         }
+
+        return START_STICKY
+    }
 
     override fun onDestroy() {
         super.onDestroy()
@@ -46,7 +51,6 @@ class ForegroundService : Service() {
 
         wakeLock?.release()
 
-        // авто перезапуск
         try {
             val i = Intent(this, ForegroundService::class.java)
             startForegroundService(i)
@@ -56,7 +60,7 @@ class ForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     // ------------------------------------------------------------
-    // PARTIAL WAKELOCK — держит CPU 24/7 (экран может спать)
+    // PARTIAL WAKELOCK — держит CPU 24/7
     // ------------------------------------------------------------
     private fun acquireWakeLock() {
         try {
@@ -74,31 +78,30 @@ class ForegroundService : Service() {
     }
 
     // ------------------------------------------------------------
-    // SAFEST FOREGROUND START
+    // SAFE FOREGROUND START
     // ------------------------------------------------------------
-        private fun startAsForeground() {
-            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("360 Synergy Kiosk")
-                .setContentText("Running")
-                .setSmallIcon(R.drawable.ic_kiosk)
-                .setOngoing(true)
-                .build()
-        
-            // Без указания типа foreground-сервиса
-            startForeground(
-                NOTIFICATION_ID,
-                notification
-            )
-        }
+    private fun startAsForeground() {
+
+        // ✔ заменена иконка (твоя отсутствует)
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("360 Synergy Kiosk")
+            .setContentText("Running")
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setOngoing(true)
+            .build()
+
+        startForeground(
+            NOTIFICATION_ID,
+            notification
+        )
+    }
 
     private fun buildNotification(): Notification {
-        val channelId = "kiosk_fg_channel"
-        val channelName = "Kiosk Background Service"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val chan = NotificationChannel(
-                channelId,
-                channelName,
+                CHANNEL_ID,
+                "Kiosk Background Service",
                 NotificationManager.IMPORTANCE_MIN
             )
             chan.setSound(null, null)
@@ -110,7 +113,7 @@ class ForegroundService : Service() {
         }
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, channelId)
+            Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle("")
                 .setContentText("")
                 .setSmallIcon(android.R.color.transparent)
@@ -141,7 +144,7 @@ class ForegroundService : Service() {
     }
 
     // ------------------------------------------------------------
-    // WATCHDOG — держит сервис живым
+    // WATCHDOG — держит сервис в живом состоянии
     // ------------------------------------------------------------
     private fun startWatchdog() {
         watchdogHandler.post(object : Runnable {
@@ -156,34 +159,33 @@ class ForegroundService : Service() {
             }
         })
     }
+
     // =====================================================================
-//  DAILY AUTO-RESTART — автоматический перезапуск в 03:00 каждый день
-// =====================================================================
-            private fun startDailyRestartTimer() {
-                val handler = android.os.Handler(mainLooper)
-            
-                handler.post(object : Runnable {
-                    override fun run() {
-                        val cal = java.util.Calendar.getInstance()
-                        val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
-                        val minute = cal.get(java.util.Calendar.MINUTE)
-            
-                        // Выполняется ровно в 03:00
-                        if (hour == 3 && minute <= 1) {
-                            Log.d("DAILY_RESTART", "Restarting app at 03:00")
-            
-                            restartApp()
-                        }
-            
-                        handler.postDelayed(this, 60000) // каждые 60 секунд
-                    }
-                })
+    // DAILY AUTO-RESTART — 03:00
+    // =====================================================================
+    private fun startDailyRestartTimer() {
+        val handler = Handler(mainLooper)
+
+        handler.post(object : Runnable {
+            override fun run() {
+                val cal = java.util.Calendar.getInstance()
+                val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                val minute = cal.get(java.util.Calendar.MINUTE)
+
+                if (hour == 3 && minute <= 1) {
+                    Log.d("DAILY_RESTART", "Restarting app at 03:00")
+                    restartApp()
+                }
+
+                handler.postDelayed(this, 60000)
             }
-            
-            private fun restartApp() {
-                val ctx = applicationContext
-                val i = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
-                i?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(i)
-}
+        })
+    }
+
+    private fun restartApp() {
+        val ctx = applicationContext
+        val i = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
+        i?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        ctx.startActivity(i)
+    }
 }
