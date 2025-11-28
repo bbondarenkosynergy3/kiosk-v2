@@ -28,12 +28,18 @@ android {
 
     buildTypes {
         release {
+            // 🔥 КРИТИЧЕСКОЕ: полностью исключить R8
             minifyEnabled false
+            shrinkResources false
+
             signingConfig signingConfigs.release
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+
+            // 🔥 НЕ использовать optimize-файл
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
         debug {
             minifyEnabled false
+            shrinkResources false
         }
     }
 
@@ -52,10 +58,8 @@ android {
 }
 
 dependencies {
-    // ⚙️ Совместимый Kotlin SDK
     implementation "org.jetbrains.kotlin:kotlin-stdlib:2.0.21"
 
-    // ⚙️ Firebase BOM гарантирует совместимость всех SDK
     implementation platform('com.google.firebase:firebase-bom:33.4.0')
     implementation 'com.google.firebase:firebase-common'
     implementation 'com.google.firebase:firebase-analytics'
@@ -63,7 +67,6 @@ dependencies {
     implementation 'com.google.firebase:firebase-firestore'
     implementation 'com.google.android.material:material:1.12.0'
 
-    // 🔧 AndroidX (чтобы избежать ошибок с core.ktx)
     implementation 'androidx.core:core-ktx:1.13.1'
     implementation 'androidx.activity:activity-ktx:1.9.3'
 }
