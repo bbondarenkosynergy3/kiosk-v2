@@ -19,6 +19,9 @@
         tools:ignore="ProtectedPermissions" />
 
     <application
+        android:name=".KioskApplication"
+        android:testOnly="false"
+        tools:replace="android:testOnly"
         android:label="360 Synergy Kiosk (Pro)"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:resizeableActivity="false">
