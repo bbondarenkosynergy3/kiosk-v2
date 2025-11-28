@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F7F9FB"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:id="@+id/root"
+        android:orientation="vertical"
+        android:padding="32dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal">
+
+        <!-- Логотип -->
+        <ImageView
+            android:id="@+id/logo"
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:layout_marginTop="32dp"
+            android:layout_marginBottom="24dp"
+            android:scaleType="fitCenter" />
+
+        <!-- Заголовок -->
+        <TextView
+            android:id="@+id/title"
+            android:text="Set up your device"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="#1A1A1A"
+            android:layout_marginBottom="8dp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <!-- Подзаголовок -->
+        <TextView
+            android:id="@+id/subtitle"
+            android:text="Enter a name for this device."
+            android:textSize="15sp"
+            android:textColor="#5E6C7B"
+            android:gravity="center"
+            android:layout_marginBottom="24dp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <!-- Device name -->
+        <EditText
+            android:id="@+id/deviceNameInput"
+            android:hint="Device name"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:background="@android:drawable/edit_text"
+            android:padding="14dp"
+            android:maxLines="1"
+            android:textSize="16sp"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Кнопка продолжения -->
+        <TextView
+            android:id="@+id/submitButton"
+            android:text="Continue"
+            android:textSize="18sp"
+            android:textColor="@android:color/white"
+            android:gravity="center"
+            android:paddingTop="14dp"
+            android:paddingBottom="14dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#888888"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <!-- Контейнер прогресса -->
+        <LinearLayout
+            android:id="@+id/progressContainer"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:layout_marginTop="24dp"
+            android:visibility="gone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <ProgressBar
+                android:id="@+id/progressBar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="16dp"
+                android:max="100" />
+
+            <TextView
+                android:id="@+id/progressText"
+                android:text="0%"
+                android:textSize="14sp"
+                android:textColor="#5E6C7B"
+                android:layout_marginTop="8dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</ScrollView>

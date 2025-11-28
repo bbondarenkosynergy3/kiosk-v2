@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:label="Synergy360 Installer"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        android:allowBackup="false">
+
+        <!-- Installer UI + deep link -->
+        <activity
+            android:name=".InstallerActivity"
+            android:exported="true">
+
+            <!-- Можно открыть из лаунчера -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Запуск по ссылке:
+                 https://360synergy.net/install?company=...&primary=...&accent=...&logo=... -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="https"
+                    android:host="360synergy.net"
+                    android:pathPrefix="/install" />
+            </intent-filter>
+        </activity>
+
+        <!-- Экран завершения установки -->
+        <activity
+            android:name=".FinishActivity"
+            android:exported="false" />
+
+        <!-- FileProvider для установки APK -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="net.synergy360.installer.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+
+</manifest>
