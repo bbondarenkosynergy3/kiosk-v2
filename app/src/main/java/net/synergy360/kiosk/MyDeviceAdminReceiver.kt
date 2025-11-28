@@ -4,23 +4,12 @@ import android.app.admin.DeviceAdminReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import android.os.Build
-import com.google.firebase.firestore.FirebaseFirestore
 
 class MyDeviceAdminReceiver : DeviceAdminReceiver() {
 
     override fun onEnabled(context: Context, intent: Intent) {
         Log.i("DeviceOwner", "Device admin enabled")
-        try {
-            FirebaseFirestore.getInstance().collection("startupLogs").add(
-                mapOf(
-                    "event" to "device_admin_enabled",
-                    "timestamp" to System.currentTimeMillis(),
-                    "device" to Build.MODEL,
-                    "build" to Build.DISPLAY
-                )
-            )
-        } catch (_: Exception) { }
+        // Никаких Firebase здесь — иначе краш во время provisioning
     }
 
     override fun onProfileProvisioningComplete(context: Context, intent: Intent) {
@@ -34,5 +23,6 @@ class MyDeviceAdminReceiver : DeviceAdminReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         Log.i("DeviceOwner", "Receiver action: ${intent.action}")
+        // Оставляем — это безопасно
     }
 }
